@@ -4,20 +4,30 @@ import os
 from datetime import datetime, timedelta
 import pytz
 
-# --- MODO DE PRODUÇÃO (AUTOMÁTICO) ---
-# O robô vai pegar o link que você salvou nos Secrets do GitHub
-DB_URL = os.getenv("DB_URL")
-API_KEY = os.getenv("API_KEY")
+# ==============================================================================
+# COLE SEU LINK ABAIXO (DENTRO DAS ASPAS)
+DB_URL = "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
+
+# API Key
+API_KEY = "a38db0f256a84b4c71d294ac0e213307"
+# ==============================================================================
 
 FUSO_BR = pytz.timezone('America/Sao_Paulo')
 
-def minerar_seguro_automatico():
-    data_hoje = datetime.now(FUSO_BR)
-    # Busca HOJE e AMANHÃ (48h)
-    data_amanha = data_hoje + timedelta(days=1)
-    datas = [data_hoje.strftime('%Y-%m-%d'), data_amanha.strftime('%Y-%m-%d')]
+# LISTA VIP DE LIGAS (Premier League, La Liga, Bundesliga, Serie A, Brasileirão, Champions)
+LIGAS_TOP = [39, 140, 78, 135, 61, 71, 2, 13]
+
+def minerar_elite():
+    # REMOVI A TRAVA DE SEGURANÇA. AGORA VAI RODAR DIRETO.
     
-    print(f"🚀 INICIANDO VARREDURA AUTOMÁTICA (48H)")
+    data_hoje = datetime.now(FUSO_BR)
+    # Pega Hoje e Amanhã
+    datas = [
+        data_hoje.strftime('%Y-%m-%d'), 
+        (data_hoje + timedelta(days=1)).strftime('%Y-%m-%d')
+    ]
+    
+    print(f"🚀 INICIANDO VARREDURA DE ELITE (SEM TRAVAS)")
 
     try:
         print("🔌 Conectando ao Banco...")
@@ -28,57 +38,76 @@ def minerar_seguro_automatico():
         total_salvo = 0
 
         for data_atual in datas:
-            print(f"\n🔎 Data: {data_atual}")
+            print(f"\n🔎 Verificando data: {data_atual}")
             
             url = f"https://v3.football.api-sports.io/fixtures?date={data_atual}"
             headers = {'x-rapidapi-key': API_KEY, 'x-rapidapi-host': 'v3.football.api-sports.io'}
             
             try:
-                # Timeout de 15s para não travar se a API engasgar
                 response = requests.get(url, headers=headers, timeout=15)
                 jogos = response.json().get('response', [])
             except:
-                print("   ⚠️ API instável nesta data. Pulando...")
-                continue
-            
-            if not jogos:
-                print(f"   ⚠️ Nenhum jogo encontrado.")
+                print("   ⚠️ API instável. Pulando...")
                 continue
 
-            # LIMITADOR DE SEGURANÇA (50 JOGOS)
-            jogos_limitados = jogos[:50] 
-            print(f"   ✅ Processando {len(jogos_limitados)} jogos...")
+            if not jogos: 
+                print("   ⚠️ Sem jogos nesta data.")
+                continue
 
-            for jogo in jogos_limitados:
+            # --- FILTRAGEM DE OURO ---
+            jogos_filtrados = []
+            for jogo in jogos:
+                # 1. Filtra só Ligas TOP
+                if jogo['league']['id'] not in LIGAS_TOP:
+                    continue
+                
+                # 2. Filtra só jogos QUE NÃO COMEÇARAM (NS = Not Started)
                 status = jogo['fixture']['status']['short']
-                if status in ['FT', 'AET', 'PEN']: continue 
+                if status != 'NS': 
+                    continue
+                
+                jogos_filtrados.append(jogo)
 
-                nome = f"{jogo['teams']['home']['name']} vs {jogo['teams']['away']['name']}"
+            print(f"   ✅ Jogos Totais: {len(jogos)} -> Jogos de Elite Futuros: {len(jogos_filtrados)}")
+
+            # Processa os jogos filtrados
+            for jogo in jogos_filtrados:
+                time_casa = jogo['teams']['home']['name']
+                time_fora = jogo['teams']['away']['name']
+                liga = jogo['league']['name']
+                
+                # Formata a hora para João Pessoa
+                data_utc = datetime.fromisoformat(jogo['fixture']['date'].replace('Z', '+00:00'))
+                data_br = data_utc.astimezone(FUSO_BR)
+                data_formatada = data_br.strftime('%d/%m %H:%M')
+                
+                # Nome chique com Data: "PL | Liverpool vs City | 21/02 16:00"
+                nome_display = f"{liga} | {time_casa} vs {time_fora} | 📅 {data_formatada}"
                 
                 try:
-                    # GOLS
+                    # 1. MERCADO DE GOLS
                     cur.execute("""
                         INSERT INTO analysis_logs (fixture_name, probabilidade, odd_justa, odd_mercado, valor_ev, mercado_tipo, created_at)
                         VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                    """, (nome, 75.0, 1.30, 1.90, 20.0, "Gols"))
+                    """, (nome_display, 75.0, 1.30, 1.90, 20.0, "Gols"))
                     
-                    # ESCANTEIOS
+                    # 2. MERCADO DE FAVORITOS (NOVA ABA)
                     cur.execute("""
                         INSERT INTO analysis_logs (fixture_name, probabilidade, odd_justa, odd_mercado, valor_ev, mercado_tipo, created_at)
                         VALUES (%s, %s, %s, %s, %s, %s, NOW())
-                    """, (nome, 65.0, 1.50, 2.00, 15.0, "Escanteios"))
-                    
-                    conn.commit() # Salva a cada jogo
+                    """, (nome_display, 80.0, 1.25, 1.70, 15.0, "Favoritos"))
+
+                    conn.commit() 
                     total_salvo += 1
                 except:
                     conn.rollback()
 
         cur.close()
         conn.close()
-        print(f"🏆 SUCESSO! {total_salvo} jogos salvos.")
+        print(f"\n🏆 SUCESSO! {total_salvo} jogos de Elite salvos.")
 
     except Exception as e:
         print(f"❌ ERRO: {e}")
 
 if __name__ == "__main__":
-    minerar_seguro_automatico()
+    minerar_elite()

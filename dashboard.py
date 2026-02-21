@@ -2,77 +2,47 @@ import streamlit as st
 import pandas as pd
 import psycopg2
 from datetime import datetime
-import os
-import pytz 
+import pytz
 
-# --- CONFIGURAÇÃO DE SEGURANÇA ---
+# --- LINK DO BANCO ---
+# Tenta pegar da gaveta secreta (nuvem), se não achar, usa o link direto (local)
 try:
-    # Tenta pegar das Secrets do Streamlit Cloud
     DB_URL = st.secrets["DB_URL"]
 except:
-    # Backup (caso precise rodar local) - Mas o foco agora é a nuvem
-    DB_URL = os.getenv("DB_URL")
+    DB_URL = "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
 
-# Configuração da Página
 st.set_page_config(page_title="Edge Analytics Pro", page_icon="⚽", layout="wide")
-
-# Estilização
-st.markdown("""
-    <style>
-    .main { background-color: #0e1117; }
-    div[data-testid="stMetricValue"] { color: #00ff00; }
-    .stDataFrame { border: 1px solid #31333f; border-radius: 10px; }
-    </style>
-    """, unsafe_allow_html=True)
 
 def carregar_dados(tipo):
     try:
         conn = psycopg2.connect(DB_URL)
-        
-        # --- A MUDANÇA ESTÁ AQUI ---
-        # Removi o filtro de DATA. Agora ele pega os últimos 50 jogos, não importa quando foram criados.
-        query = f"""
-            SELECT fixture_name, probabilidade, odd_justa, odd_mercado, valor_ev, created_at 
-            FROM analysis_logs 
-            WHERE mercado_tipo LIKE '%{tipo}%' 
-            ORDER BY created_at DESC 
-            LIMIT 50
-        """
-        
+        query = f"SELECT fixture_name, probabilidade, odd_justa, odd_mercado, valor_ev FROM analysis_logs WHERE mercado_tipo = '{tipo}' ORDER BY created_at DESC LIMIT 20"
         df = pd.read_sql(query, conn)
         conn.close()
         return df
-    except Exception as e:
-        st.error(f"Ainda não há dados ou houve erro: {e}")
+    except:
         return pd.DataFrame()
 
-# --- SIDEBAR ---
-st.sidebar.title("Edge Analytics")
-mercado_selecionado = st.sidebar.selectbox("Filtro de Mercado", ["Escanteios", "Gols"])
+st.title("⚽ Elite Football Analytics")
+st.write("### Foco: Premier League, LaLiga, Bundesliga e Serie A")
 
-# --- CORPO PRINCIPAL ---
-st.title(f"💎 Ranking: {mercado_selecionado}")
+# Criação das Abas
+aba_gols, aba_fav = st.tabs(["🔥 Gols (Over 2.5)", "🏆 Favoritismos"])
 
-# Busca os dados
-df = carregar_dados(mercado_selecionado)
+with aba_gols:
+    df_gols = carregar_dados("Gols")
+    if not df_gols.empty:
+        st.dataframe(df_gols, use_container_width=True, hide_index=True)
+    else:
+        st.info("Buscando novos jogos de Gols...")
 
-if not df.empty:
-    # Mostra os dados sem frescura
-    st.success(f"Encontramos {len(df)} jogos no banco de dados!")
-    
-    # Formata para ficar bonito
-    df_visual = df.rename(columns={
-        'fixture_name': 'Jogo',
-        'valor_ev': 'Valor EV',
-        'odd_mercado': 'Odd Bet365',
-        'created_at': 'Horário da Análise'
-    })
-    
-    st.dataframe(df_visual, use_container_width=True, hide_index=True)
-else:
-    st.warning("O banco de dados conectou, mas a tabela está vazia.")
-    st.info("Dica: Rode o arquivo 'worker_saas.py' no seu computador mais uma vez para enviar dados novos.")
+with aba_fav:
+    st.write("### ⭐ Times com maior probabilidade de vitória")
+    df_fav = carregar_dados("Favoritos")
+    if not df_fav.empty:
+        st.dataframe(df_fav, use_container_width=True, hide_index=True)
+    else:
+        st.info("Aguardando análise de favoritismo...")
 
-# Rodapé com hora certa
-fuso_br = pytz.timezone('America/Sao_Paulo')
-st.caption(f"Atualizado em: {datetime.now(fuso_br).strftime('%H:%M:%S')}")
+fuso = pytz.timezone('America/Sao_Paulo')
+st.caption(f"Última atualização: {datetime.now(fuso).strftime('%d/%m %H:%M:%S')}")
