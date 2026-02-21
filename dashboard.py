@@ -10,13 +10,13 @@ try:
     # Tenta pegar das Secrets do Streamlit Cloud
     DB_URL = st.secrets["DB_URL"]
 except:
-    # Backup para rodar localmente no VS Code
-    DB_URL = "postgresql://postgres.vbxmtclyraxmhvfcnfee:0LMMYBrja3phgofg@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
+    # Backup (caso precise rodar local) - Mas o foco agora é a nuvem
+    DB_URL = os.getenv("DB_URL")
 
 # Configuração da Página
 st.set_page_config(page_title="Edge Analytics Pro", page_icon="⚽", layout="wide")
 
-# Estilização CSS para o Modo Dark
+# Estilização
 st.markdown("""
     <style>
     .main { background-color: #0e1117; }
@@ -28,59 +28,51 @@ st.markdown("""
 def carregar_dados(tipo):
     try:
         conn = psycopg2.connect(DB_URL)
-        # Filtro de data ajustado para evitar erros de fuso horário
-        query = f"""SELECT fixture_name, probabilidade, odd_justa, odd_mercado, valor_ev 
-                   FROM analysis_logs 
-                   WHERE mercado_tipo LIKE '%{tipo}%' 
-                   AND created_at >= (CURRENT_DATE - INTERVAL '1 day')
-                   ORDER BY created_at DESC, valor_ev DESC LIMIT 50"""
+        
+        # --- A MUDANÇA ESTÁ AQUI ---
+        # Removi o filtro de DATA. Agora ele pega os últimos 50 jogos, não importa quando foram criados.
+        query = f"""
+            SELECT fixture_name, probabilidade, odd_justa, odd_mercado, valor_ev, created_at 
+            FROM analysis_logs 
+            WHERE mercado_tipo LIKE '%{tipo}%' 
+            ORDER BY created_at DESC 
+            LIMIT 50
+        """
+        
         df = pd.read_sql(query, conn)
         conn.close()
         return df
     except Exception as e:
-        st.error(f"Erro de conexão com o banco: {e}")
+        st.error(f"Ainda não há dados ou houve erro: {e}")
         return pd.DataFrame()
 
-# --- SIDEBAR (BARRA LATERAL) ---
-st.sidebar.image("https://cdn-icons-png.flaticon.com/512/53/53244.png", width=80)
+# --- SIDEBAR ---
 st.sidebar.title("Edge Analytics")
-st.sidebar.markdown("---")
-
-mercado_selecionado = st.sidebar.selectbox(
-    "Filtro de Mercado", 
-    ["Escanteios", "Gols"]
-)
+mercado_selecionado = st.sidebar.selectbox("Filtro de Mercado", ["Escanteios", "Gols"])
 
 # --- CORPO PRINCIPAL ---
-st.title(f"💎 Ranking de Valor: {mercado_selecionado}")
+st.title(f"💎 Ranking: {mercado_selecionado}")
 
+# Busca os dados
 df = carregar_dados(mercado_selecionado)
 
 if not df.empty:
-    df['ROI %'] = (df['valor_ev'] / df['odd_justa']) * 100
-    m1, m2, m3 = st.columns(3)
-    m1.metric("Oportunidades", len(df[df['valor_ev'] > 0]))
-    m2.metric("ROI Máximo", f"{df['ROI %'].max():.1f}%")
-    m3.metric("Maior Odd", f"{df['odd_mercado'].max():.2f}")
-
-    st.markdown("---")
+    # Mostra os dados sem frescura
+    st.success(f"Encontramos {len(df)} jogos no banco de dados!")
     
-    df_final = df.rename(columns={
-        'fixture_name': 'Confronto',
-        'probabilidade': 'Prob. (%)',
-        'odd_justa': 'Odd Justa',
+    # Formata para ficar bonito
+    df_visual = df.rename(columns={
+        'fixture_name': 'Jogo',
+        'valor_ev': 'Valor EV',
         'odd_mercado': 'Odd Bet365',
-        'valor_ev': 'Vantagem (Pts)'
+        'created_at': 'Horário da Análise'
     })
-
-    st.dataframe(df_final, use_container_width=True, hide_index=True)
-
+    
+    st.dataframe(df_visual, use_container_width=True, hide_index=True)
 else:
-    st.warning(f"Nenhum jogo de {mercado_selecionado} encontrado.")
-    st.info("Execute o minerador na aba 'Actions' do GitHub.")
+    st.warning("O banco de dados conectou, mas a tabela está vazia.")
+    st.info("Dica: Rode o arquivo 'worker_saas.py' no seu computador mais uma vez para enviar dados novos.")
 
-# --- AJUSTE DE HORÁRIO PARA JOÃO PESSOA ---
+# Rodapé com hora certa
 fuso_br = pytz.timezone('America/Sao_Paulo')
-horario_br = datetime.now(fuso_br).strftime('%H:%M:%S')
-
-st.caption(f"Sistema Edge Analytics | João Pessoa-PB | Atualizado em: {horario_br}")
+st.caption(f"Atualizado em: {datetime.now(fuso_br).strftime('%H:%M:%S')}")
