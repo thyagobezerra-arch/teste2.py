@@ -1,3 +1,6 @@
+# Versão Final V3 - Forçando Atualização
+import streamlit as st
+...
 import streamlit as st
 import pandas as pd
 import psycopg2
