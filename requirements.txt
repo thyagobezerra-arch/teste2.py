@@ -1,7 +1,6 @@
 streamlit
 pandas
 psycopg2-binary
-scipy
+plotly
 requests
-matplotlib
-pytz
+numpy
