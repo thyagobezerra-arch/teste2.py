@@ -1,31 +1,34 @@
-name: Varredura Automática Edge Analytics
+name: 🚀 Minerador Automático Edge Pro
 
 on:
+  # Agendamento: Roda às 08:00 e 18:00 (Horário de Brasília)
   schedule:
-    # Programado para rodar a cada 3 horas (00:00, 03:00, 06:00...)
-    - cron: '0 */3 * * *'
-  workflow_dispatch: # Este botão permite que você rode na hora que quiser
+    - cron: '0 11,21 * * *' 
+  
+  # Libera o botão "Run Workflow" no site do GitHub
+  workflow_dispatch: 
 
 jobs:
-  run-miner:
+  executar_minerador:
     runs-on: ubuntu-latest
+    
     steps:
-      - name: Baixar Código do GitHub
+      - name: 1. Baixando os arquivos do GitHub
         uses: actions/checkout@v3
 
-      - name: Configurar Python
+      - name: 2. Preparando o ambiente Python
         uses: actions/setup-python@v4
         with:
-          python-version: '3.10'
+          python-version: '3.9'
 
-      - name: Instalar Dependências
-        run: pip install -r requirements.txt
+      - name: 3. Instalando as bibliotecas necessárias
+        run: |
+          pip install requests psycopg2-binary pytz
 
-      - name: Rodar Minerador
+      - name: 4. Rodando o Minerador Total
         env:
+          # Puxa o link do banco que você salvou nos Secrets do GitHub
           DB_URL: ${{ secrets.DB_URL }}
-          API_KEY: ${{ secrets.API_KEY }}
-        run: python worker_saas.py  
-        
+        run: python worker_saas.py
 
         

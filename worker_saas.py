@@ -8,7 +8,15 @@ import random
 
 # ==============================================================================
 # COLE SEU LINK DO SUPABASE AQUI
-DB_URL = "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
+import os
+
+# 1. Primeiro, o robô tenta pegar a senha do "cofre" (GitHub ou Nuvem)
+DB_URL = os.getenv("DB_URL")
+
+# 2. Se o robô não achar nada no cofre (porque você está rodando no seu próprio PC), 
+# ele vai usar o seu link manual abaixo
+if not DB_URL:
+    DB_URL = "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
 
 # API Key
 API_KEY = "a38db0f256a84b4c71d294ac0e213307"
