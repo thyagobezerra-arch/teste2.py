@@ -1,31 +1,29 @@
-name: 🚀 Minerador Automático Edge Pro
+name: Minerador Oficial
 
 on:
-  schedule:
-    - cron: '0 11,21 * * *' 
-  workflow_dispatch: 
+  workflow_dispatch:
 
 jobs:
-  executar_minerador:
+  executar:
     runs-on: ubuntu-latest
     
+    # MUDANÇA: Variáveis no topo para garantir leitura
+    env:
+      DB_URL: "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
+      TELEGRAM_TOKEN: "8344469814:AAHvhEKG9_6qfaPc-1gdjYdcBGn6qdcfFeg"
+      TELEGRAM_CHAT_ID: "1343274781"
+
     steps:
-      - name: 1. Baixando os arquivos
+      - name: Baixar Codigo
         uses: actions/checkout@v3
 
-      - name: 2. Configurando Python
+      - name: Instalar Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: 3. Instalando bibliotecas
-        run: |
-          pip install requests psycopg2-binary pytz
+      - name: Instalar Bibliotecas
+        run: pip install requests psycopg2-binary pytz
 
-      - name: 4. Executando o Robô
-        env:
-          # AQUI ESTÁ O TRUQUE: Colocamos direto entre aspas duplas
-          DB_URL: "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
-          TELEGRAM_TOKEN: "8344469814:AAHvhEKG9_6qfaPc-1gdjYdcBGn6qdcfFeg"
-          TELEGRAM_CHAT_ID: "1343274781"
+      - name: Rodar Minerador
         run: python worker_saas.py
