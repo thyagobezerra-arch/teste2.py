@@ -47,14 +47,15 @@ def init_connection():
 def load_data():
     try:
         conn = init_connection()
-        query = "SELECT * FROM analysis_logs ORDER BY created_at DESC LIMIT 100"
+        query = "SELECT * FROM analysis_logs ORDER BY created_at DESC LIMIT 150"
         df = pd.read_sql(query, conn)
         conn.close()
         
-        # --- CORREÇÃO 1: REMOVE DUPLICATAS ---
-        # Mantém apenas a primeira ocorrência de cada jogo (fixture_id), eliminando repetições do teste
         if not df.empty:
+            # 1. REMOVE DUPLICATAS (Garante que só existe 1 linha por jogo)
             df.drop_duplicates(subset=['fixture_id'], keep='first', inplace=True)
+            # 2. RESET NO ÍNDICE (Organiza a casa para evitar erros de leitura)
+            df.reset_index(drop=True, inplace=True)
             
         return df
     except Exception as e:
@@ -66,6 +67,12 @@ def load_data():
 # ==============================================================================
 
 st.sidebar.title("🦁 Filtros Edge Pro")
+
+# Botão de Emergência para Limpar Cache
+if st.sidebar.button("🗑️ Limpar Cache e Atualizar"):
+    st.cache_data.clear()
+    st.rerun()
+
 st.sidebar.markdown("---")
 
 df = load_data()
@@ -74,9 +81,12 @@ if not df.empty:
     filtro_texto = st.sidebar.text_input("Buscar Time ou Liga", "")
     ev_minimo = st.sidebar.slider("Valor Esperado (EV) Mínimo %", 0, 50, 5)
     
+    # Aplica filtros
     df_filtrado = df[df['valor_ev'] >= ev_minimo]
+    
     if filtro_texto:
-        df_filtrado = df_filtrado[df_filtrado['fixture_name'].str.contains(filtro_texto, case=False)]
+        # Garante que seja string para evitar erro
+        df_filtrado = df_filtrado[df_filtrado['fixture_name'].astype(str).str.contains(filtro_texto, case=False)]
 else:
     df_filtrado = pd.DataFrame()
 
@@ -89,7 +99,7 @@ with col_titulo:
 
 st.markdown("---")
 
-if not df.empty:
+if not df_filtrado.empty:
     # KPIs
     col1, col2, col3, col4 = st.columns(4)
     with col1: st.metric("Jogos Únicos", len(df_filtrado))
@@ -101,7 +111,8 @@ if not df.empty:
     
     st.markdown("### 🎯 Oportunidades Encontradas")
 
-    for index, row in df_filtrado.iterrows():
+    # Loop para desenhar os cards
+    for i, row in df_filtrado.iterrows():
         # Card Expansível
         with st.expander(f"{row['fixture_name']}  |  EV: {row['valor_ev']:.2f}%", expanded=True):
             c1, c2, c3 = st.columns([1, 2, 1])
@@ -133,9 +144,10 @@ if not df.empty:
             with c3:
                 st.markdown("#### 🚀 Ação")
                 st.markdown("Este jogo apresenta desajuste matemático.")
-                # --- CORREÇÃO 2: KEY ÚNICA ---
-                # O parâmetro key=... garante que o Streamlit saiba diferenciar os botões
-                st.button(f"Ver na Bet365 #{row['fixture_id']}", key=f"btn_{row['id']}_{index}")
+                
+                # --- A SOLUÇÃO FINAL PARA O ERRO ---
+                # Usamos 'fixture_id' que é único + um prefixo novo 'btn_v2'
+                st.button(f"Ver na Bet365 #{row['fixture_id']}", key=f"btn_v2_{row['fixture_id']}")
 
 else:
-    st.warning("⏳ Aguardando dados... Verifique se o GitHub Actions rodou.")
+    st.warning("⏳ Aguardando dados... Se a tela estiver branca, clique em 'Limpar Cache' na barra lateral.")
