@@ -5,7 +5,7 @@ import plotly.graph_objects as go
 import os
 
 # ==============================================================================
-# CONFIGURAÇÃO DA PÁGINA (VISUAL PRO)
+# CONFIGURAÇÃO DA PÁGINA
 # ==============================================================================
 st.set_page_config(
     page_title="Edge Pro Analytics",
@@ -14,7 +14,7 @@ st.set_page_config(
     initial_sidebar_state="expanded"
 )
 
-# CSS Customizado para dar ar de "App Nativo"
+# CSS Customizado
 st.markdown("""
     <style>
     .stMetric {
@@ -22,10 +22,6 @@ st.markdown("""
         padding: 15px;
         border-radius: 10px;
         border: 1px solid #333;
-    }
-    .stDataFrame {
-        border: 1px solid #333;
-        border-radius: 5px;
     }
     div[data-testid="stExpander"] {
         background-color: #0E1117;
@@ -38,25 +34,28 @@ st.markdown("""
 # ==============================================================================
 # CONEXÃO COM O BANCO
 # ==============================================================================
-# Tenta pegar dos secrets do Streamlit Cloud, senão usa variável local (para testes)
 def init_connection():
     db_url = os.getenv("DB_URL")
     if not db_url:
         try:
             return psycopg2.connect(st.secrets["DB_URL"])
         except:
-            # Fallback para teste local se não tiver secrets
             return psycopg2.connect("postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres")
     return psycopg2.connect(db_url)
 
-@st.cache_data(ttl=60) # Atualiza a cada 60 segundos
+@st.cache_data(ttl=60)
 def load_data():
     try:
         conn = init_connection()
-        # Pega os jogos mais recentes primeiro
         query = "SELECT * FROM analysis_logs ORDER BY created_at DESC LIMIT 100"
         df = pd.read_sql(query, conn)
         conn.close()
+        
+        # --- CORREÇÃO 1: REMOVE DUPLICATAS ---
+        # Mantém apenas a primeira ocorrência de cada jogo (fixture_id), eliminando repetições do teste
+        if not df.empty:
+            df.drop_duplicates(subset=['fixture_id'], keep='first', inplace=True)
+            
         return df
     except Exception as e:
         st.error(f"Erro ao conectar no banco: {e}")
@@ -66,28 +65,21 @@ def load_data():
 # LAYOUT DO DASHBOARD
 # ==============================================================================
 
-# --- Sidebar (Filtros) ---
 st.sidebar.title("🦁 Filtros Edge Pro")
 st.sidebar.markdown("---")
 
 df = load_data()
 
 if not df.empty:
-    # Filtro de Ligas (Extraindo do nome do jogo ou stats se possível, aqui simplificado)
-    # Como salvamos tudo junto, vamos filtrar por texto
     filtro_texto = st.sidebar.text_input("Buscar Time ou Liga", "")
-    
-    # Filtro de EV Mínimo
     ev_minimo = st.sidebar.slider("Valor Esperado (EV) Mínimo %", 0, 50, 5)
     
-    # Aplicando filtros
     df_filtrado = df[df['valor_ev'] >= ev_minimo]
     if filtro_texto:
         df_filtrado = df_filtrado[df_filtrado['fixture_name'].str.contains(filtro_texto, case=False)]
 else:
     df_filtrado = pd.DataFrame()
 
-# --- Cabeçalho ---
 col_logo, col_titulo = st.columns([1, 5])
 with col_logo:
     st.markdown("# 🦁")
@@ -97,34 +89,25 @@ with col_titulo:
 
 st.markdown("---")
 
-# --- KPIs (Indicadores Chave) ---
 if not df.empty:
+    # KPIs
     col1, col2, col3, col4 = st.columns(4)
-    
-    with col1:
-        st.metric("Jogos Mapeados", len(df))
-    with col2:
-        oportunidades = len(df[df['valor_ev'] > 10])
-        st.metric("Oportunidades Ouro (EV > 10%)", oportunidades, delta_color="normal")
-    with col3:
-        media_ev = df['valor_ev'].mean()
-        st.metric("EV Médio do Mercado", f"{media_ev:.2f}%")
-    with col4:
-        st.metric("Última Atualização", df['created_at'].iloc[0].strftime('%H:%M'))
+    with col1: st.metric("Jogos Únicos", len(df_filtrado))
+    with col2: st.metric("Oportunidades Ouro", len(df_filtrado[df_filtrado['valor_ev'] > 10]))
+    with col3: st.metric("EV Médio", f"{df_filtrado['valor_ev'].mean():.2f}%")
+    with col4: st.metric("Última Atualização", df['created_at'].iloc[0].strftime('%H:%M'))
 
     st.markdown("---")
     
-    # --- Lista de Jogos (Estilo Card) ---
     st.markdown("### 🎯 Oportunidades Encontradas")
 
     for index, row in df_filtrado.iterrows():
-        # Cria um "Card" para cada jogo
+        # Card Expansível
         with st.expander(f"{row['fixture_name']}  |  EV: {row['valor_ev']:.2f}%", expanded=True):
-            
             c1, c2, c3 = st.columns([1, 2, 1])
             
-            # Coluna 1: O Velocímetro de Valor
             with c1:
+                # Gráfico Velocímetro
                 fig = go.Figure(go.Indicator(
                     mode = "gauge+number",
                     value = row['valor_ev'],
@@ -140,7 +123,6 @@ if not df.empty:
                 fig.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20), paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"})
                 st.plotly_chart(fig, use_container_width=True)
             
-            # Coluna 2: Detalhes Técnicos
             with c2:
                 st.markdown("#### 📊 Análise Estatística")
                 st.markdown(f"**Probabilidade Real:** `{row['probabilidade']:.1f}%`")
@@ -148,11 +130,12 @@ if not df.empty:
                 st.markdown(f"**Mercado Indicado:** `{row['mercado_tipo']}`")
                 st.info(f"💡 {row['stats_resumo']}")
             
-            # Coluna 3: Botão de Ação (Simulado)
             with c3:
                 st.markdown("#### 🚀 Ação")
                 st.markdown("Este jogo apresenta desajuste matemático.")
-                st.button(f"Ver na Bet365 #{row['fixture_id']}")
+                # --- CORREÇÃO 2: KEY ÚNICA ---
+                # O parâmetro key=... garante que o Streamlit saiba diferenciar os botões
+                st.button(f"Ver na Bet365 #{row['fixture_id']}", key=f"btn_{row['id']}_{index}")
 
 else:
-    st.warning("⏳ Aguardando dados do minerador... (Verifique se o GitHub Actions rodou)")
+    st.warning("⏳ Aguardando dados... Verifique se o GitHub Actions rodou.")
