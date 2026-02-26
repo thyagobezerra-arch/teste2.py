@@ -1,5 +1,4 @@
-name: 🚀 MEU NOVO MINERADOR
-
+name: 🚀  Minerador Automático Edge Pro
 on:
   # Agendamento: Roda às 08:00 e 18:00 (Horário de Brasília)
   schedule:

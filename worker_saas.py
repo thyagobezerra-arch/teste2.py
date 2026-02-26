@@ -5,26 +5,30 @@ from datetime import datetime, timedelta
 import pytz
 import math
 import random 
+# Importação correta do seu arquivo do bot
+from telegram_bot import enviar_alerta, criar_mensagem_vip
 
 # ==============================================================================
-# COLE SEU LINK DO SUPABASE AQUI
-import os
+# CONFIGURAÇÃO DO BANCO E API
+# ==============================================================================
 
-# 1. Primeiro, o robô tenta pegar a senha do "cofre" (GitHub ou Nuvem)
+# 1. Primeiro, tenta pegar a senha do "cofre" (GitHub ou Nuvem)
 DB_URL = os.getenv("DB_URL")
 
-# 2. Se o robô não achar nada no cofre (porque você está rodando no seu próprio PC), 
-# ele vai usar o seu link manual abaixo
+# 2. Se não achar (PC local), usa o link manual
 if not DB_URL:
     DB_URL = "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
 
-# API Key
+# API Key Football-Data
 API_KEY = "a38db0f256a84b4c71d294ac0e213307"
-# ==============================================================================
 
 FUSO_BR = pytz.timezone('America/Sao_Paulo')
 # Lista Elite para o robô priorizar
 LIGAS_ELITE = [39, 140, 78, 135, 61, 71, 2, 13, 11, 4, 9, 3] 
+
+# ==============================================================================
+# FUNÇÕES DE CÁLCULO
+# ==============================================================================
 
 def calcular_mercados_complexos(media_casa, media_fora, forca_atq_casa, forca_atq_fora):
     try:
@@ -63,6 +67,10 @@ def calcular_mercados_complexos(media_casa, media_fora, forca_atq_casa, forca_at
         }
     except: return None
 
+# ==============================================================================
+# MINERADOR PRINCIPAL
+# ==============================================================================
+
 def minerar_futuro():
     print("🚀 INICIANDO MINERADOR DO FUTURO (PRÓXIMOS 3 DIAS)")
     
@@ -70,11 +78,11 @@ def minerar_futuro():
         conn = psycopg2.connect(DB_URL)
         cur = conn.cursor()
         
-        # Limpa tabela para renovar os dados
+        # Cria tabela se não existir
         cur.execute("CREATE TABLE IF NOT EXISTS analysis_logs (id SERIAL PRIMARY KEY, fixture_name TEXT, probabilidade FLOAT, odd_justa FLOAT, odd_mercado FLOAT, valor_ev FLOAT, mercado_tipo TEXT, fixture_id INTEGER, stats_resumo TEXT, created_at TIMESTAMP DEFAULT NOW());")
         
         data_base = datetime.now(FUSO_BR)
-        # --- MUDANÇA: AGORA OLHAMOS 3 DIAS NA FRENTE ---
+        # Varre Hoje + Próximos 2 dias
         datas = [
             data_base.strftime('%Y-%m-%d'), 
             (data_base + timedelta(days=1)).strftime('%Y-%m-%d'),
@@ -94,11 +102,9 @@ def minerar_futuro():
             
             if not jogos: continue
 
-            # Pega TUDO que for ELITE + Alguns aleatórios para encher
+            # Filtra jogos (Elite + alguns outros)
             elite = [j for j in jogos if j['league']['id'] in LIGAS_ELITE and j['fixture']['status']['short'] == 'NS']
             resto = [j for j in jogos if j['league']['id'] not in LIGAS_ELITE and j['fixture']['status']['short'] == 'NS'][:10]
-            
-            # Prioriza Elite, mas garante pelo menos 15 jogos por dia
             lista_final = elite + resto
             
             print(f"   ✅ Encontrados {len(lista_final)} jogos para processar...")
@@ -109,7 +115,7 @@ def minerar_futuro():
                 time_fora = j['teams']['away']['name']
                 liga = j['league']['name']
                 
-                # Verifica Cache
+                # Verifica Cache (se já tem no banco, pula)
                 cur.execute("SELECT id FROM analysis_logs WHERE fixture_id = %s", (f_id,))
                 if cur.fetchone(): continue
 
@@ -130,6 +136,11 @@ def minerar_futuro():
 
                     favorito = time_casa if mc > mf else time_fora
                     
+                    # --- VARIÁVEIS DE VALOR (Configuradas Manualmente por enquanto) ---
+                    ev_calculado = 15.0 # Placeholder: No futuro faremos o cálculo real Odd vs Prob
+                    prob_real = dados['ov25']
+                    odd_justa_calc = 1.50
+                    
                     stats_texto = (
                         f"Favorito: **{favorito}** | "
                         f"[OV15]{dados['ov15']}[/OV15] "
@@ -145,20 +156,47 @@ def minerar_futuro():
                     icone = "⭐" if j['league']['id'] in LIGAS_ELITE else "⚽"
                     nome_display = f"{icone} {liga} | {time_casa} vs {time_fora}"
                     
+                    # Salva no Banco
                     cur.execute("""
                         INSERT INTO analysis_logs (fixture_id, fixture_name, probabilidade, odd_justa, odd_mercado, valor_ev, mercado_tipo, stats_resumo, created_at)
                         VALUES (%s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                    """, (f_id, nome_display, dados['ov25'], 1.50, 1.90, 15.0, "Gols", stats_texto))
+                    """, (f_id, nome_display, prob_real, odd_justa_calc, 1.90, ev_calculado, "Gols", stats_texto))
                     
                     conn.commit()
                     total += 1
-                except: pass
+                    
+                    # ==========================================================
+                    # 🚀 AQUI ESTÁ A LÓGICA DO TELEGRAM (DENTRO DO LOOP)
+                    # ==========================================================
+                    
+                    # Condição para envio: EV alto ou Probabilidade de Gols muito alta
+                    if ev_calculado >= 15 and prob_real > 55:
+                        print(f"🔥 ENVIANDO ALERTA VIP: {time_casa} x {time_fora}")
+                        
+                        msg = criar_mensagem_vip(
+                            jogo=f"{time_casa} vs {time_fora}",
+                            liga=liga,
+                            ev=ev_calculado,
+                            probabilidade=prob_real,
+                            mercado="Gols (Over 2.5)"
+                        )
+                        # Envia e ignora erros para não parar o minerador
+                        try:
+                            enviar_alerta(msg)
+                        except Exception as e_telegram:
+                            print(f"⚠️ Erro ao enviar Telegram: {e_telegram}")
+                            
+                    # ==========================================================
+
+                except Exception as e_loop:
+                    print(f"Erro no jogo {f_id}: {e_loop}")
+                    continue
 
         conn.close()
         print(f"\n🏆 BANCO RECHEADO! {total} novos jogos cadastrados.")
 
     except Exception as e:
-        print(f"❌ ERRO: {e}")
+        print(f"❌ ERRO GERAL: {e}")
 
 if __name__ == "__main__":
     minerar_futuro()
