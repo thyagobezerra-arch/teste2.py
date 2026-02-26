@@ -24,8 +24,8 @@ jobs:
 
       - name: 4. Executando o Robô
         env:
-          # Agora usamos a referência correta aos segredos do GitHub
-          DB_URL: ${{ secrets.DB_URL }}
-          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}
-          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }}
+          # AQUI ESTÁ O TRUQUE: Colocamos direto entre aspas duplas
+          DB_URL: "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
+          TELEGRAM_TOKEN: "8344469814:AAHvhEKG9_6qfaPc-1gdjYdcBGn6qdcfFeg"
+          TELEGRAM_CHAT_ID: "1343274781"
         run: python worker_saas.py
