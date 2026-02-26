@@ -169,8 +169,8 @@ def minerar_futuro():
                     # 🚀 AQUI ESTÁ A LÓGICA DO TELEGRAM (DENTRO DO LOOP)
                     # ==========================================================
                     
-                    # Condição para envio: EV alto ou Probabilidade de Gols muito alta
-                    if ev_calculado >= 15 and prob_real > 55:
+                    # DEPOIS (Modo Teste de Fogo: Aceita qualquer coisa positiva)
+                    if ev_calculado > 0.1:
                         print(f"🔥 ENVIANDO ALERTA VIP: {time_casa} x {time_fora}")
                         
                         msg = criar_mensagem_vip(
