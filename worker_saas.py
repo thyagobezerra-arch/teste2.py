@@ -95,7 +95,7 @@ def minerar_futuro():
                 
                 # --- MODO AMNÉSIA (Cache Desativado) ---
                 # cur.execute("SELECT id FROM analysis_logs WHERE fixture_id = %s", (f_id,))
-                # if cur.fetchone(): continue
+                if cur.fetchone(): continue
                 # ---------------------------------------
 
                 print(f"      🧮 Processando: {time_casa} vs {time_fora}...")
@@ -127,7 +127,7 @@ def minerar_futuro():
                     
                     # --- GATILHO TELEGRAM (MODO FÁCIL) ---
                     # Se o EV for maior que 0 (ou seja, QUALQUER COISA), ele manda
-                    if ev_calculado > 0:
+                    if ev_calculado > 10:
                         print(f"🔥 ENVIANDO ALERTA TELEGRAM: {time_casa}")
                         msg = criar_mensagem_vip(f"{time_casa} x {time_fora}", liga, ev_calculado, prob_real, "Gols Over 2.5")
                         try:
