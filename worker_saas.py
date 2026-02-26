@@ -26,14 +26,7 @@ def minerar_futuro():
         cur.execute("CREATE TABLE IF NOT EXISTS analysis_logs (id SERIAL PRIMARY KEY, fixture_name TEXT, probabilidade FLOAT, odd_justa FLOAT, odd_mercado FLOAT, valor_ev FLOAT, mercado_tipo TEXT, fixture_id INTEGER, stats_resumo TEXT, created_at TIMESTAMP DEFAULT NOW());")
         conn.commit()
 
-        # --- TESTE DE FORÇA BRUTA (Para matar o "Banco Vazio") ---
-        print("🧪 Inserindo jogo de teste para validar conexão...")
-        cur.execute("""
-            INSERT INTO analysis_logs (fixture_id, fixture_name, probabilidade, odd_justa, odd_mercado, valor_ev, mercado_tipo, stats_resumo, created_at)
-            VALUES (999, '🦁 TESTE CONEXAO | Thyago vs Robô', 75.0, 1.20, 2.00, 25.0, 'Gols', 'Se voce ver isso, a ponte entre GitHub e Supabase esta 100%!', NOW())
-            ON CONFLICT DO NOTHING;
-        """)
-        conn.commit()
+        
 
         data_atual = datetime.now(FUSO_BR).strftime('%Y-%m-%d')
         print(f"🔎 Varrendo data: {data_atual}")
