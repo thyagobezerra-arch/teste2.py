@@ -1,239 +1,158 @@
-# Versão Final V3 - Forçando Atualização
-import streamlit as st
-...
 import streamlit as st
 import pandas as pd
 import psycopg2
 import plotly.graph_objects as go
-import re
+import os
 
-# --- CONFIGURAÇÃO DA PÁGINA (MOBILE FIRST) ---
-st.set_page_config(page_title="Edge Pro Live", page_icon="🦁", layout="wide", initial_sidebar_state="collapsed")
+# ==============================================================================
+# CONFIGURAÇÃO DA PÁGINA (VISUAL PRO)
+# ==============================================================================
+st.set_page_config(
+    page_title="Edge Pro Analytics",
+    page_icon="🦁",
+    layout="wide",
+    initial_sidebar_state="expanded"
+)
 
-# --- CSS AVANÇADO (ESTILO BET365 / GLASSMORPHISM) ---
+# CSS Customizado para dar ar de "App Nativo"
 st.markdown("""
     <style>
-    /* Importando Fonte Moderna */
-    @import url('https://fonts.googleapis.com/css2?family=Roboto:wght@300;400;700&display=swap');
-    
-    html, body, [class*="css"] {
-        font-family: 'Roboto', sans-serif;
-        background-color: #0e1117; 
-        color: #e0e0e0;
-    }
-
-    /* Esconde menu padrão do Streamlit */
-    #MainMenu {visibility: hidden;}
-    footer {visibility: hidden;}
-    header {visibility: hidden;}
-
-    /* CABEÇALHO PERSONALIZADO */
-    .custom-header {
-        background: linear-gradient(90deg, #1c1c1c 0%, #000000 100%);
+    .stMetric {
+        background-color: #1E1E1E;
         padding: 15px;
-        border-bottom: 2px solid #00ffb7;
-        margin-bottom: 20px;
-        display: flex;
-        align-items: center;
-        justify-content: space-between;
-        border-radius: 0 0 15px 15px;
+        border-radius: 10px;
+        border: 1px solid #333;
     }
-    .logo-text { font-size: 24px; font-weight: bold; color: #fff; }
-    .logo-icon { font-size: 24px; margin-right: 10px; }
-
-    /* CARD DE JOGO (GLASSMORPHISM) */
-    .game-card {
-        background: rgba(30, 30, 30, 0.7);
-        backdrop-filter: blur(10px);
-        -webkit-backdrop-filter: blur(10px);
-        border: 1px solid rgba(255, 255, 255, 0.1);
-        border-radius: 16px;
-        padding: 20px;
-        margin-bottom: 16px;
-        transition: transform 0.2s;
-        box-shadow: 0 4px 6px rgba(0, 0, 0, 0.3);
+    .stDataFrame {
+        border: 1px solid #333;
+        border-radius: 5px;
     }
-    .game-card:hover {
-        transform: translateY(-2px);
-        border-color: #00ffb7;
-    }
-    
-    /* BADGES E ETIQUETAS */
-    .badge-live {
-        background-color: #ef4444; color: white; padding: 2px 8px; 
-        border-radius: 4px; font-size: 10px; font-weight: bold; letter-spacing: 1px;
-    }
-    .badge-league {
-        color: #94a3b8; font-size: 12px; text-transform: uppercase; letter-spacing: 0.5px;
-    }
-    .game-title {
-        font-size: 18px; font-weight: 700; color: #ffffff; margin: 10px 0;
-    }
-    .money-badge {
-        background: rgba(0, 255, 183, 0.15);
-        color: #00ffb7;
-        padding: 5px 12px;
-        border-radius: 20px;
-        font-weight: bold;
-        font-size: 14px;
-        border: 1px solid rgba(0, 255, 183, 0.3);
-        display: inline-block;
-    }
-
-    /* GRID DE ESTATÍSTICAS */
-    .stats-grid {
-        display: grid;
-        grid-template-columns: repeat(auto-fit, minmax(60px, 1fr));
-        gap: 8px;
-        margin-top: 15px;
-        background: rgba(0,0,0,0.3);
-        padding: 10px;
-        border-radius: 12px;
-    }
-    .stat-item { text-align: center; }
-    .stat-label { font-size: 9px; color: #64748b; text-transform: uppercase; }
-    .stat-val { font-size: 14px; font-weight: bold; color: #e2e8f0; }
-    
-    /* Tabs Customizadas */
-    .stTabs [data-baseweb="tab-list"] { gap: 10px; }
-    .stTabs [data-baseweb="tab"] {
-        height: 50px; white-space: pre-wrap;
-        background-color: #1c1c1c; border-radius: 8px; color: white;
-    }
-    .stTabs [aria-selected="true"] {
-        background-color: #00ffb7 !important; color: black !important;
+    div[data-testid="stExpander"] {
+        background-color: #0E1117;
+        border: 1px solid #333;
+        border-radius: 10px;
     }
     </style>
-    
-    <div class="custom-header">
-        <div>
-            <span class="logo-icon">🦁</span>
-            <span class="logo-text">EDGE PRO</span>
-        </div>
-        <div style="font-size: 12px; color: #888;">Live v3.0</div>
-    </div>
     """, unsafe_allow_html=True)
 
-# --- CONEXÃO SEGURA (PARA NUVEM) ---
-try:
-    # Na nuvem, ele vai pegar daqui automaticamente
-    DB_URL = st.secrets["DB_URL"]
-except:
-    # No seu PC, coloque o link aqui para testar, MAS APAGUE ANTES DE SUBIR PRO GITHUB
-    DB_URL = "COLE_SEU_LINK_AQUI_PARA_TESTE_LOCAL"
+# ==============================================================================
+# CONEXÃO COM O BANCO
+# ==============================================================================
+# Tenta pegar dos secrets do Streamlit Cloud, senão usa variável local (para testes)
+def init_connection():
+    db_url = os.getenv("DB_URL")
+    if not db_url:
+        try:
+            return psycopg2.connect(st.secrets["DB_URL"])
+        except:
+            # Fallback para teste local se não tiver secrets
+            return psycopg2.connect("postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres")
+    return psycopg2.connect(db_url)
 
-# --- FUNÇÕES (Mantidas iguais, focando na performance) ---
-def criar_mini_donut(valor, cor):
-    if valor is None: return None
-    fig = go.Figure(go.Pie(values=[valor, 100-valor], hole=0.8, marker_colors=[cor, '#333'], textinfo='none', hoverinfo='none'))
-    fig.add_annotation(text=f"{int(valor)}", showarrow=False, font=dict(size=10, color=cor)) # Sem % pra caber melhor
-    fig.update_layout(showlegend=False, height=45, margin={'t':0,'b':0,'l':0,'r':0}, paper_bgcolor='rgba(0,0,0,0)')
-    return fig
-
-def processar_stats(texto):
-    d = {"fav": "", "ov15": 0, "ov25": 0, "und25": 0, "btts": 0, "cantos": 0, "chutes": 0, "cartoes": 0, "ia": ""}
-    if not texto: return d
+@st.cache_data(ttl=60) # Atualiza a cada 60 segundos
+def load_data():
     try:
-        tags = {
-            "ov15": r'\[OV15\](.*?)\[/OV15\]', "ov25": r'\[OV25\](.*?)\[/OV25\]',
-            "und25": r'\[UND25\](.*?)\[/UND25\]', "btts": r'\[BTTS\](.*?)\[/BTTS\]',
-            "cantos": r'\[CANTOS\](.*?)\[/CANTOS\]', "chutes": r'\[CHUTES\](.*?)\[/CHUTES\]',
-            "cartoes": r'\[CARTOES\](.*?)\[/CARTOES\]'
-        }
-        for k, v in tags.items():
-            match = re.search(v, texto)
-            if match: d[k] = float(match.group(1))
-        m_fav = re.search(r'Favorito: \*\*(.*?)\*\*', texto)
-        if m_fav: d['fav'] = m_fav.group(1)
-        m_ia = re.search(r'IA: (.*)', texto)
-        if m_ia: d['ia'] = m_ia.group(1)
-    except: pass
-    return d
-
-@st.cache_data(ttl=10)
-def carregar_dados():
-    try:
-        if "COLE_SEU" in DB_URL: return pd.DataFrame(), "⚠️ Configure os Secrets na Nuvem!"
-        conn = psycopg2.connect(DB_URL)
-        df = pd.read_sql("SELECT * FROM analysis_logs WHERE mercado_tipo = 'Gols' ORDER BY created_at DESC LIMIT 60", conn)
+        conn = init_connection()
+        # Pega os jogos mais recentes primeiro
+        query = "SELECT * FROM analysis_logs ORDER BY created_at DESC LIMIT 100"
+        df = pd.read_sql(query, conn)
         conn.close()
-        return df, "OK"
-    except Exception as e: return pd.DataFrame(), str(e)
+        return df
+    except Exception as e:
+        st.error(f"Erro ao conectar no banco: {e}")
+        return pd.DataFrame()
 
-# --- RENDERIZAÇÃO DO CARD (HTML PURO + STYLED) ---
-def renderizar_card(row, banca_val):
-    s = processar_stats(row['stats_resumo'])
-    if s['ov15'] == 0: return
+# ==============================================================================
+# LAYOUT DO DASHBOARD
+# ==============================================================================
 
-    partes = row['fixture_name'].split('|')
-    liga = partes[0].replace("⭐", "").replace("⚽", "").strip()
-    jogo = partes[1].strip() if len(partes) > 1 else row['fixture_name']
-    stake = banca_val * (0.02 if row['valor_ev'] > 15 else 0.01)
+# --- Sidebar (Filtros) ---
+st.sidebar.title("🦁 Filtros Edge Pro")
+st.sidebar.markdown("---")
 
-    # LAYOUT DO CARD
-    with st.container():
-        st.markdown(f"""
-        <div class="game-card">
-            <div style="display:flex; justify-content:space-between;">
-                <span class="badge-league">🏆 {liga}</span>
-                <span class="badge-live">LIVE</span>
-            </div>
-            <div class="game-title">{jogo}</div>
-            <div style="display:flex; justify-content:space-between; align-items:center; margin-bottom:10px;">
-                <span style="font-size:12px; color:#888;">🔥 {s['fav']}</span>
-                <div class="money-badge">R$ {stake:.2f}</div>
-            </div>
-        """, unsafe_allow_html=True)
-        
-        # Colunas de Gráficos (Streamlit Columns dentro do Container HTML)
-        c1, c2, c3, c4, c5, c6, c7 = st.columns(7)
-        with c1: 
-            st.markdown("<div class='stat-item'><div class='stat-label'>Over 1.5</div>", unsafe_allow_html=True)
-            st.plotly_chart(criar_mini_donut(s['ov15'], "#facc15"), use_container_width=True, key=f"k1{row['id']}")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with c2:
-            st.markdown("<div class='stat-item'><div class='stat-label'>Over 2.5</div>", unsafe_allow_html=True)
-            st.plotly_chart(criar_mini_donut(s['ov25'], "#22c55e"), use_container_width=True, key=f"k2{row['id']}")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with c3:
-            st.markdown("<div class='stat-item'><div class='stat-label'>BTTS</div>", unsafe_allow_html=True)
-            st.plotly_chart(criar_mini_donut(s['btts'], "#3b82f6"), use_container_width=True, key=f"k3{row['id']}")
-            st.markdown("</div>", unsafe_allow_html=True)
-        with c4:
-             st.markdown(f"<div class='stat-item'><div class='stat-label'>Under 2.5</div><div class='stat-val' style='color:#ef4444'>{int(s['und25'])}%</div></div>", unsafe_allow_html=True)
-        with c5:
-             st.markdown(f"<div class='stat-item'><div class='stat-label'>Cantos</div><div class='stat-val'>+{s['cantos']}</div></div>", unsafe_allow_html=True)
-        with c6:
-             st.markdown(f"<div class='stat-item'><div class='stat-label'>Cartões</div><div class='stat-val'>{s['cartoes']}</div></div>", unsafe_allow_html=True)
-        with c7:
-             st.markdown(f"<div class='stat-item'><div class='stat-label'>Chutes</div><div class='stat-val'>{s['chutes']}</div></div>", unsafe_allow_html=True)
-        
-        st.markdown("</div>", unsafe_allow_html=True)
+df = load_data()
 
-# --- CORPO PRINCIPAL ---
-df, status = carregar_dados()
-
-# Sidebar Minimalista
-st.sidebar.header("⚙️ Banca")
-banca = st.sidebar.number_input("Valor Total", value=1000.0, step=50.0, label_visibility="collapsed")
-
-if status == "OK" and not df.empty:
-    LIGAS_ELITE = ["Premier League", "La Liga", "Serie A", "Bundesliga", "Brasileirão", "Champions League", "Libertadores"]
-    df['Liga_Limpa'] = df['fixture_name'].apply(lambda x: x.split('|')[0].replace("⭐", "").replace("⚽", "").strip())
+if not df.empty:
+    # Filtro de Ligas (Extraindo do nome do jogo ou stats se possível, aqui simplificado)
+    # Como salvamos tudo junto, vamos filtrar por texto
+    filtro_texto = st.sidebar.text_input("Buscar Time ou Liga", "")
     
-    # Abas com Ícones
-    tab1, tab2 = st.tabs(["⭐ ELITE VIP", "🌍 MUNDO"])
+    # Filtro de EV Mínimo
+    ev_minimo = st.sidebar.slider("Valor Esperado (EV) Mínimo %", 0, 50, 5)
     
-    with tab1:
-        elite = df[df['Liga_Limpa'].apply(lambda x: any(v in x for v in LIGAS_ELITE))]
-        if not elite.empty:
-            for _, row in elite.iterrows(): renderizar_card(row, banca)
-        else: st.info("Sem jogos da Elite no momento.")
-            
-    with tab2:
-        mundo = df[~df['Liga_Limpa'].apply(lambda x: any(v in x for v in LIGAS_ELITE))]
-        if not mundo.empty:
-            for _, row in mundo.iterrows(): renderizar_card(row, banca)
-        else: st.info("Aguardando jogos...")
+    # Aplicando filtros
+    df_filtrado = df[df['valor_ev'] >= ev_minimo]
+    if filtro_texto:
+        df_filtrado = df_filtrado[df_filtrado['fixture_name'].str.contains(filtro_texto, case=False)]
 else:
-    st.error(status)
+    df_filtrado = pd.DataFrame()
+
+# --- Cabeçalho ---
+col_logo, col_titulo = st.columns([1, 5])
+with col_logo:
+    st.markdown("# 🦁")
+with col_titulo:
+    st.markdown("# Painel de Inteligência Esportiva")
+    st.markdown("Monitoramento em Tempo Real de Oportunidades de Valor (+EV)")
+
+st.markdown("---")
+
+# --- KPIs (Indicadores Chave) ---
+if not df.empty:
+    col1, col2, col3, col4 = st.columns(4)
+    
+    with col1:
+        st.metric("Jogos Mapeados", len(df))
+    with col2:
+        oportunidades = len(df[df['valor_ev'] > 10])
+        st.metric("Oportunidades Ouro (EV > 10%)", oportunidades, delta_color="normal")
+    with col3:
+        media_ev = df['valor_ev'].mean()
+        st.metric("EV Médio do Mercado", f"{media_ev:.2f}%")
+    with col4:
+        st.metric("Última Atualização", df['created_at'].iloc[0].strftime('%H:%M'))
+
+    st.markdown("---")
+    
+    # --- Lista de Jogos (Estilo Card) ---
+    st.markdown("### 🎯 Oportunidades Encontradas")
+
+    for index, row in df_filtrado.iterrows():
+        # Cria um "Card" para cada jogo
+        with st.expander(f"{row['fixture_name']}  |  EV: {row['valor_ev']:.2f}%", expanded=True):
+            
+            c1, c2, c3 = st.columns([1, 2, 1])
+            
+            # Coluna 1: O Velocímetro de Valor
+            with c1:
+                fig = go.Figure(go.Indicator(
+                    mode = "gauge+number",
+                    value = row['valor_ev'],
+                    title = {'text': "Valor Esperado (EV)"},
+                    gauge = {
+                        'axis': {'range': [None, 50]},
+                        'bar': {'color': "#00ff00" if row['valor_ev'] > 15 else "#f1c40f"},
+                        'steps': [
+                            {'range': [0, 5], 'color': "gray"},
+                            {'range': [5, 15], 'color': "#333"}],
+                    }
+                ))
+                fig.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20), paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"})
+                st.plotly_chart(fig, use_container_width=True)
+            
+            # Coluna 2: Detalhes Técnicos
+            with c2:
+                st.markdown("#### 📊 Análise Estatística")
+                st.markdown(f"**Probabilidade Real:** `{row['probabilidade']:.1f}%`")
+                st.markdown(f"**Odd Justa:** `{row['odd_justa']:.2f}` vs **Odd Mercado:** `{row['odd_mercado']:.2f}`")
+                st.markdown(f"**Mercado Indicado:** `{row['mercado_tipo']}`")
+                st.info(f"💡 {row['stats_resumo']}")
+            
+            # Coluna 3: Botão de Ação (Simulado)
+            with c3:
+                st.markdown("#### 🚀 Ação")
+                st.markdown("Este jogo apresenta desajuste matemático.")
+                st.button(f"Ver na Bet365 #{row['fixture_id']}")
+
+else:
+    st.warning("⏳ Aguardando dados do minerador... (Verifique se o GitHub Actions rodou)")

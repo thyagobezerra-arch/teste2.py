@@ -3,5 +3,3 @@ pandas
 psycopg2-binary
 plotly
 requests
-numpy
-pytz
