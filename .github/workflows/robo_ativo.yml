@@ -1,0 +1,32 @@
+name: 🚀 Minerador Automático Edge Pro
+
+on:
+  # Agendamento: Roda automaticamente às 08:00 e 18:00 (Horário de Brasília)
+  schedule:
+    - cron: '0 11,21 * * *' 
+  
+  # ESSENCIAL: Libera o botão "Run Workflow" na aba Actions
+  workflow_dispatch: 
+
+jobs:
+  executar_minerador:
+    runs-on: ubuntu-latest
+    
+    steps:
+      - name: 1. Baixando os arquivos do seu repositório
+        uses: actions/checkout@v3
+
+      - name: 2. Configurando o ambiente Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+
+      - name: 3. Instalando as bibliotecas (Requests, Postgres, Fuso Horário)
+        run: |
+          pip install requests psycopg2-binary pytz
+
+      - name: 4. Executando o Minerador Total
+        env:
+          # Puxa o link do banco que você salvou em Settings > Secrets > Actions
+          DB_URL: ${{ secrets.DB_URL }}
+        run: python worker_saas.py
