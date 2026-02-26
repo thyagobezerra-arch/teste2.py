@@ -1,36 +1,10 @@
-import requests
-import os
-
+# No arquivo telegram_bot.py
 def enviar_alerta(mensagem):
-    # Tenta pegar as chaves do cofre (GitHub ou PC)
-    token = os.getenv("TELEGRAM_TOKEN")
-    chat_id = os.getenv("TELEGRAM_CHAT_ID")
+    # token = os.getenv("TELEGRAM_TOKEN")  <-- Comente esta linha
+    # chat_id = os.getenv("TELEGRAM_CHAT_ID") <-- Comente esta linha
     
-    if not token or not chat_id:
-        print("⚠️ Telegram não configurado (Falta Token ou ID).")
-        return
-
-    url = f"https://api.telegram.org/bot{token}/sendMessage"
-    payload = {
-        "chat_id": chat_id,
-        "text": mensagem,
-        "parse_mode": "Markdown",
-        "disable_web_page_preview": True
-    }
+    # Coloque direto aqui para testar no PC:
+    token = "SEU_TOKEN_DO_BOTFATHER_AQUI"
+    chat_id = "SEU_ID_NUMERICO_AQUI"
     
-    try:
-        requests.post(url, json=payload)
-    except Exception as e:
-        print(f"Erro ao enviar Telegram: {e}")
-
-def criar_mensagem_vip(jogo, liga, ev, probabilidade, mercado):
-    """Cria o texto estilo Grupo VIP"""
-    return (
-        f"🦁 *ALERTA EDGE PRO* 🦁\n\n"
-        f"🏆 *Liga:* {liga}\n"
-        f"⚽ *Jogo:* {jogo}\n"
-        f"💎 *Mercado:* {mercado}\n\n"
-        f"📊 *Valor Esperado (EV):* {ev:.2f}%\n"
-        f"🔢 *Probabilidade Real:* {probabilidade:.1f}%\n\n"
-        f"🔗 [Ver Análise Completa](https://seu-app-no-streamlit.app)"
-    )
+    # ... resto do código ...

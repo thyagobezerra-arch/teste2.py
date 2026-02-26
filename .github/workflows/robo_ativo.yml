@@ -23,9 +23,9 @@ jobs:
           pip install requests psycopg2-binary pytz
 
       - name: 4. Executando o Robô
-        # AQUI ESTAVA O ERRO: Faltava passar as chaves do Telegram!
         env:
-          DB_URL: ${{ postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres }}
-          TELEGRAM_TOKEN: ${{ 8344469814:AAHvhEKG9_6qfaPc-1gdjYdcBGn6qdcfFeg }}   # <--- LINHA NOVA
-          TELEGRAM_CHAT_ID: ${{ 1343274781 }} # <--- LINHA NOVA
+          # CORREÇÃO: Removemos o ${{ }} e colocamos aspas duplas " "
+          DB_URL: "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
+          TELEGRAM_TOKEN: "8344469814:AAHvhEKG9_6qfaPc-1gdjYdcBGn6qdcfFeg"
+          TELEGRAM_CHAT_ID: "1343274781"
         run: python worker_saas.py
