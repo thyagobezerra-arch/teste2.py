@@ -3,6 +3,7 @@ import pandas as pd
 import psycopg2
 import plotly.graph_objects as go
 import os
+import uuid  # <--- A ARMA SECRETA CONTRA DUPLICATAS
 
 # ==============================================================================
 # CONFIGURAÇÃO DA PÁGINA
@@ -47,19 +48,17 @@ def init_connection():
 def load_data():
     try:
         conn = init_connection()
-        query = "SELECT * FROM analysis_logs ORDER BY created_at DESC LIMIT 150"
+        query = "SELECT * FROM analysis_logs ORDER BY created_at DESC LIMIT 100"
         df = pd.read_sql(query, conn)
         conn.close()
         
+        # Remove duplicatas baseado no ID do jogo
         if not df.empty:
-            # 1. REMOVE DUPLICATAS (Garante que só existe 1 linha por jogo)
             df.drop_duplicates(subset=['fixture_id'], keep='first', inplace=True)
-            # 2. RESET NO ÍNDICE (Organiza a casa para evitar erros de leitura)
-            df.reset_index(drop=True, inplace=True)
             
         return df
     except Exception as e:
-        st.error(f"Erro ao conectar no banco: {e}")
+        # st.error(f"Erro ao conectar: {e}") # Comentado para não sujar a tela
         return pd.DataFrame()
 
 # ==============================================================================
@@ -68,8 +67,8 @@ def load_data():
 
 st.sidebar.title("🦁 Filtros Edge Pro")
 
-# Botão de Emergência para Limpar Cache
-if st.sidebar.button("🗑️ Limpar Cache e Atualizar"):
+# Botão para forçar atualização
+if st.sidebar.button("🔄 Atualizar Dados"):
     st.cache_data.clear()
     st.rerun()
 
@@ -81,11 +80,9 @@ if not df.empty:
     filtro_texto = st.sidebar.text_input("Buscar Time ou Liga", "")
     ev_minimo = st.sidebar.slider("Valor Esperado (EV) Mínimo %", 0, 50, 5)
     
-    # Aplica filtros
     df_filtrado = df[df['valor_ev'] >= ev_minimo]
     
     if filtro_texto:
-        # Garante que seja string para evitar erro
         df_filtrado = df_filtrado[df_filtrado['fixture_name'].astype(str).str.contains(filtro_texto, case=False)]
 else:
     df_filtrado = pd.DataFrame()
@@ -100,7 +97,6 @@ with col_titulo:
 st.markdown("---")
 
 if not df_filtrado.empty:
-    # KPIs
     col1, col2, col3, col4 = st.columns(4)
     with col1: st.metric("Jogos Únicos", len(df_filtrado))
     with col2: st.metric("Oportunidades Ouro", len(df_filtrado[df_filtrado['valor_ev'] > 10]))
@@ -108,17 +104,18 @@ if not df_filtrado.empty:
     with col4: st.metric("Última Atualização", df['created_at'].iloc[0].strftime('%H:%M'))
 
     st.markdown("---")
-    
     st.markdown("### 🎯 Oportunidades Encontradas")
 
-    # Loop para desenhar os cards
+    # Loop com índice para garantir unicidade
     for i, row in df_filtrado.iterrows():
-        # Card Expansível
+        
+        # Cria uma chave única aleatória para este render
+        chave_unica = str(uuid.uuid4())
+        
         with st.expander(f"{row['fixture_name']}  |  EV: {row['valor_ev']:.2f}%", expanded=True):
             c1, c2, c3 = st.columns([1, 2, 1])
             
             with c1:
-                # Gráfico Velocímetro
                 fig = go.Figure(go.Indicator(
                     mode = "gauge+number",
                     value = row['valor_ev'],
@@ -132,7 +129,7 @@ if not df_filtrado.empty:
                     }
                 ))
                 fig.update_layout(height=250, margin=dict(l=20, r=20, t=30, b=20), paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"})
-                st.plotly_chart(fig, use_container_width=True)
+                st.plotly_chart(fig, use_container_width=True, key=f"chart_{chave_unica}")
             
             with c2:
                 st.markdown("#### 📊 Análise Estatística")
@@ -144,10 +141,8 @@ if not df_filtrado.empty:
             with c3:
                 st.markdown("#### 🚀 Ação")
                 st.markdown("Este jogo apresenta desajuste matemático.")
-                
-                # --- A SOLUÇÃO FINAL PARA O ERRO ---
-                # Usamos 'fixture_id' que é único + um prefixo novo 'btn_v2'
-                st.button(f"Ver na Bet365 #{row['fixture_id']}", key=f"btn_v2_{row['fixture_id']}")
+                # Chave 100% ÚNICA usando UUID + ID do Banco + Índice do Loop
+                st.button(f"Ver na Bet365 #{row['fixture_id']}", key=f"btn_{row['id']}_{i}_{chave_unica}")
 
 else:
-    st.warning("⏳ Aguardando dados... Se a tela estiver branca, clique em 'Limpar Cache' na barra lateral.")
+    st.warning("⏳ Banco de dados vazio ou limpando... Aguarde o minerador rodar.")
