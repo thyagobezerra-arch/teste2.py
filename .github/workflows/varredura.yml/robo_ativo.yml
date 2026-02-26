@@ -1,10 +1,8 @@
-name: 🚀  Minerador Automático Edge Pro
+name: 🚀 Minerador Automático Edge Pro
+
 on:
-  # Agendamento: Roda às 08:00 e 18:00 (Horário de Brasília)
   schedule:
     - cron: '0 11,21 * * *' 
-  
-  # Libera o botão "Run Workflow" no site do GitHub
   workflow_dispatch: 
 
 jobs:
@@ -12,22 +10,23 @@ jobs:
     runs-on: ubuntu-latest
     
     steps:
-      - name: 1. Baixando os arquivos do GitHub
+      - name: 1. Baixando os arquivos
         uses: actions/checkout@v3
 
-      - name: 2. Preparando o ambiente Python
+      - name: 2. Configurando Python
         uses: actions/setup-python@v4
         with:
           python-version: '3.9'
 
-      - name: 3. Instalando as bibliotecas necessárias
+      - name: 3. Instalando bibliotecas
         run: |
           pip install requests psycopg2-binary pytz
 
-      - name: 4. Rodando o Minerador Total
+      - name: 4. Executando o Robô
+        # AQUI ESTAVA O ERRO: Faltava passar as chaves do Telegram!
         env:
-          # Puxa o link do banco que você salvou nos Secrets do GitHub
           DB_URL: ${{ secrets.DB_URL }}
+          TELEGRAM_TOKEN: ${{ secrets.TELEGRAM_TOKEN }}   # <--- LINHA NOVA
+          TELEGRAM_CHAT_ID: ${{ secrets.TELEGRAM_CHAT_ID }} # <--- LINHA NOVA
         run: python worker_saas.py
-
         
