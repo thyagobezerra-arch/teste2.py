@@ -6,50 +6,53 @@ import os
 import uuid
 from datetime import timedelta
 
-# 1. CONFIGURAÇÃO DA PÁGINA
+# 1. CONFIGURAÇÃO DA PÁGINA (Deve ser a primeira linha)
 st.set_page_config(page_title="Edge Pro Analytics", page_icon="🦁", layout="wide")
 
-# 2. FUNÇÃO DE CONEXÃO (Definida no topo para evitar NameError)
+# 2. FUNÇÃO DE CONEXÃO
 def init_connection():
     db_url = os.getenv("DB_URL") or st.secrets.get("DB_URL")
     if not db_url:
         db_url = "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
     return psycopg2.connect(db_url)
 
-# 3. SISTEMA DE LOGIN
+# 3. SISTEMA DE LOGIN COM FEEDBACK
 def autenticar(user, pwd):
     try:
         conn = init_connection()
         cur = conn.cursor()
-        # Busca o usuário e senha exatos
         cur.execute("SELECT id FROM users WHERE username = %s AND password = %s", (user, pwd))
         auth = cur.fetchone()
         conn.close()
         return auth is not None
     except Exception as e:
-        st.error(f"Erro técnico no login: {e}")
+        st.error(f"Erro na conexão: {e}")
         return False
 
+# Inicializa a sessão
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
-# --- TELA DE ACESSO ---
+# --- LÓGICA DE NAVEGAÇÃO ---
 if not st.session_state['logged_in']:
     st.markdown("<h1 style='text-align: center;'>🦁 Edge Pro Analytics</h1>", unsafe_allow_html=True)
+    
     col1, col2, col3 = st.columns([1,2,1])
     with col2:
-        with st.form("login_form"):
-            u = st.text_input("Usuário")
-            p = st.text_input("Senha", type="password")
-            if st.form_submit_button("Acessar Sistema"):
-                if autenticar(u, p):
-                    st.session_state['logged_in'] = True
-                    st.rerun()
-                else:
-                    st.error("Usuário ou senha incorretos.")
+        # Removi o 'with st.form' para o botão ser mais responsivo
+        u = st.text_input("Usuário", key="user")
+        p = st.text_input("Senha", type="password", key="pass")
+        
+        if st.button("Acessar Sistema", use_container_width=True):
+            if autenticar(u, p):
+                st.session_state['logged_in'] = True
+                st.success("Acesso confirmado! Entrando...")
+                st.rerun() # Força o site a recarregar já logado
+            else:
+                st.error("Usuário ou senha incorretos. Tente novamente.")
     st.stop()
 
-# --- DASHBOARD (SÓ CARREGA SE LOGADO) ---
+# --- DAQUI PARA BAIXO: SÓ O QUE APARECE DEPOIS DO LOGIN ---
 
 @st.cache_data(ttl=60)
 def load_data():
@@ -64,24 +67,26 @@ def load_data():
     except:
         return pd.DataFrame()
 
-st.sidebar.title("🦁 Painel VIP")
-if st.sidebar.button("Sair"):
+# Sidebar para o usuário saber que entrou
+st.sidebar.success(f"🦁 Logado: {st.session_state.get('user', 'Thyago')}")
+if st.sidebar.button("Sair do Sistema"):
     st.session_state['logged_in'] = False
     st.rerun()
 
-df = load_data()
-
+# --- PAINEL PRINCIPAL ---
 st.markdown("# 🦁 Inteligência Esportiva")
 st.markdown("---")
 
+df = load_data()
+
 if not df.empty:
-    ev_minimo = st.sidebar.slider("Filtrar EV % Mínimo", 0, 50, 10)
+    ev_minimo = st.sidebar.slider("Filtrar por EV %", 0, 50, 10)
     df_filtrado = df[df['valor_ev'] >= ev_minimo]
 
     for i, row in df_filtrado.iterrows():
         chave = str(uuid.uuid4())
         
-        # AJUSTE DE HORÁRIO: Subtrai 3h do UTC para chegar ao horário da Paraíba
+        # HORÁRIO BRASIL (UTC-3): O jogo de 00:30 vira 21:30 do dia anterior
         horario_br = pd.to_datetime(row['match_date']) - timedelta(hours=3)
         data_formatada = horario_br.strftime('%d/%m %H:%M')
         
@@ -95,6 +100,6 @@ if not df.empty:
                 st.write(f"**Odd Mercado:** `{row['odd_mercado']}` | **Probabilidade:** `{row['probabilidade']}%`")
                 st.info(f"💡 {row['stats_resumo']}")
             with c3:
-                st.button("Análise Detalhada", key=f"b_{chave}")
+                st.button("Copiar Análise", key=f"b_{chave}")
 else:
-    st.warning("⏳ Minerador buscando novos jogos...")
+    st.warning("⏳ O minerador está buscando novas oportunidades...")
