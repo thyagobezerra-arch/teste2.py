@@ -12,17 +12,8 @@ DB_URL = os.getenv("DB_URL") or "postgresql://postgres.vbxmtclyraxmhvfcnfee:Muda
 API_KEY = "a38db0f256a84b4c71d294ac0e213307"
 FUSO_BR = pytz.timezone('America/Sao_Paulo')
 
-# LISTA EXPANDIDA: Elite + Série B + Estaduais + Ásia + Américas
-LIGAS_MONITORADAS = [
-    39, 140, 78, 135, 61, 2, 3, 11,   # Elite Europeia
-    71, 72, 475, 477, 478, 476, 479,  # Brasil: A, B, Paulista, Carioca, Mineiro, Gaúcho, Paranaense
-    188, 283, 292,                    # Ásia: Arábia, Japão, Coreia
-    253, 13, 10, 11, 4, 9             # Américas: MLS, Libertadores, Sul-Americana
-]
+LIGAS_MONITORADAS = [39, 140, 78, 135, 61, 2, 3, 11, 71, 72, 475, 477, 478, 476, 479, 188, 283, 292, 253, 13, 10, 11, 4, 9]
 
-# ==============================================================================
-# FUNÇÕES MATEMÁTICAS
-# ==============================================================================
 def calcular_poisson(lambda_val, x):
     if lambda_val <= 0.1: lambda_val = 0.1
     return (math.exp(-lambda_val) * (lambda_val**x)) / math.factorial(x)
@@ -31,9 +22,6 @@ def prob_over(lambda_partida, n):
     prob_acumulada = sum(calcular_poisson(lambda_partida, i) for i in range(int(n) + 1))
     return max(0, (1 - prob_acumulada) * 100)
 
-# ==============================================================================
-# MINERADOR GLOBAL
-# ==============================================================================
 def minerar_futuro():
     print("🦁 MINERADOR EDGE PRO ATIVADO: MODO GLOBAL")
     try:
@@ -41,24 +29,21 @@ def minerar_futuro():
         cur = conn.cursor()
         headers = {'x-rapidapi-key': API_KEY, 'x-rapidapi-host': 'v3.football.api-sports.io'}
         
-        # Monitora hoje e amanhã para garantir volume
         datas = [datetime.now(FUSO_BR).strftime('%Y-%m-%d'), 
                  (datetime.now(FUSO_BR) + timedelta(days=1)).strftime('%Y-%m-%d')]
 
+        total_salvo = 0
         for data_alvo in datas:
             print(f"📅 Varrendo: {data_alvo}")
             res = requests.get(f"https://v3.football.api-sports.io/fixtures?date={data_alvo}", headers=headers).json()
             jogos = res.get('response', [])
-            
-            # Filtra pelas ligas que queremos
             jogos_filtrados = [j for j in jogos if j['league']['id'] in LIGAS_MONITORADAS]
-            print(f"   ✅ Encontrados {len(jogos_filtrados)} jogos nas ligas monitoradas.")
 
-            for j in jogos_filtrados[:20]: # Limite de 20 por dia para não estourar a API
+            for j in jogos_filtrados[:20]:
                 f_id = j['fixture']['id']
                 nome_jogo = f"{j['league']['name']} | {j['teams']['home']['name']} x {j['teams']['away']['name']}"
                 
-                # Ignora se o jogo já começou ou terminou
+                # Ignora jogos passados
                 if datetime.fromisoformat(j['fixture']['date'].replace('Z', '+00:00')) < datetime.now(pytz.UTC):
                     continue
 
@@ -74,11 +59,13 @@ def minerar_futuro():
                     a_avg = float(pred['teams']['away']['last_5']['goals']['for']['average'] or 1.0)
                     prob_gols = round(prob_over(h_avg + a_avg, 2), 2)
 
-                    # --- CANTOS POISSON ---
+                    # --- CANTOS POISSON (CORRIGIDO) ---
                     corners_data = comparison.get('corners', {})
-                    perc_home = corners_data.get('home', '50%') if corners_info else '50%'
-                    if perc_home is None: perc_home = '50%'
-                    lambda_c = (float(perc_home.replace('%','')) / 10) * 2
+                    perc_home_str = corners_data.get('home', '50%') if corners_data else '50%'
+                    if perc_home_str is None: perc_home_str = '50%'
+                    
+                    perc_home = float(perc_home_str.replace('%',''))
+                    lambda_c = (perc_home / 10) * 2
                     prob_cantos = round(prob_over(lambda_c, 9), 2)
 
                     # --- EV TOTAL ---
@@ -93,13 +80,15 @@ def minerar_futuro():
                             cantos_ev = EXCLUDED.cantos_ev;
                     """, (f_id, nome_jogo, ev_total, j['fixture']['date'], prob_gols, prob_cantos, "IA: Monitoramento Global Ativo"))
                     conn.commit()
-                except:
+                    total_salvo += 1
+                except Exception as e_inner:
+                    print(f"⚠️ Erro no jogo {f_id}: {e_inner}")
                     continue
 
         conn.close()
-        print("🏆 FIM! Banco de dados atualizado com a grade global.")
+        print(f"🏆 FIM! Banco de dados atualizado com {total_salvo} jogos reais.")
     except Exception as e:
-        print(f"❌ Erro: {e}")
+        print(f"❌ Erro Crítico: {e}")
 
 if __name__ == "__main__":
     minerar_futuro()
