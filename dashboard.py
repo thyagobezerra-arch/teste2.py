@@ -29,6 +29,7 @@ def autenticar(user, pwd):
         st.error(f"Erro na conexão: {e}")
         return False
 
+# Inicializa o estado de login
 if 'logged_in' not in st.session_state:
     st.session_state['logged_in'] = False
 
@@ -53,13 +54,20 @@ if not st.session_state['logged_in']:
 def load_data():
     try:
         conn = init_connection()
-        query = "SELECT * FROM analysis_logs ORDER BY match_date ASC LIMIT 100"
+        # CORREÇÃO AQUI: A query agora está devidamente indentada dentro do try
+        query = """
+            SELECT * FROM analysis_logs 
+            WHERE match_date >= NOW() - INTERVAL '3 hours' 
+            ORDER BY match_date ASC 
+            LIMIT 50
+        """
         df = pd.read_sql(query, conn)
         conn.close()
         if not df.empty:
             df.drop_duplicates(subset=['fixture_id'], keep='first', inplace=True)
         return df
-    except:
+    except Exception as e:
+        # Retorna DataFrame vazio se der erro na consulta
         return pd.DataFrame()
 
 # Menu Lateral
@@ -77,7 +85,6 @@ if not df.empty:
     ev_minimo = st.sidebar.slider("Filtrar EV % Mínimo", 0, 50, 10)
     df_filtrado = df[df['valor_ev'] >= ev_minimo]
 
-    # AQUI ESTÁ O BLOCO QUE VOCÊ PROCURAVA:
     for i, row in df_filtrado.iterrows():
         chave = str(uuid.uuid4())
         
