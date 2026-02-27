@@ -1,98 +1,77 @@
+import math
 import requests
 import psycopg2
 import os
 from datetime import datetime
 import pytz
-from telegram_bot import enviar_alerta, criar_mensagem_vip
 
-# ==============================================================================
-# CONFIGURAÇÃO
-# ==============================================================================
+# Configurações (Mantenha as suas chaves)
 DB_URL = os.getenv("DB_URL") or "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
 API_KEY = "a38db0f256a84b4c71d294ac0e213307"
-FUSO_BR = pytz.timezone('America/Sao_Paulo')
-LIGAS_ELITE = [39, 140, 78, 135, 61, 71, 2, 13, 11, 4, 9, 3] 
+
+def calcular_poisson(lambda_val, x):
+    """Calcula a probabilidade de ocorrer exatamente X eventos."""
+    return (math.exp(-lambda_val) * (lambda_val**x)) / math.factorial(x)
+
+def probabilidade_over_25(media_gols_partida):
+    """Calcula a probabilidade de sair MAIS de 2.5 gols."""
+    # P(Over 2.5) = 1 - [P(0) + P(1) + P(2)]
+    p0 = calcular_poisson(media_gols_partida, 0)
+    p1 = calcular_poisson(media_gols_partida, 1)
+    p2 = calcular_poisson(media_gols_partida, 2)
+    return (1 - (p0 + p1 + p2)) * 100
 
 def minerar_futuro():
-    print("🚀 INICIANDO MINERADOR (VERSÃO COM HORÁRIOS)")
-    
+    print("🚀 MINERADOR COM CÁLCULO DE POISSON ATIVADO")
     try:
         conn = psycopg2.connect(DB_URL)
         cur = conn.cursor()
         
-        # 1. Cria a tabela com a coluna match_date inclusa
-        cur.execute("""
-            CREATE TABLE IF NOT EXISTS analysis_logs (
-                id SERIAL PRIMARY KEY, 
-                fixture_name TEXT, 
-                probabilidade FLOAT, 
-                odd_justa FLOAT, 
-                odd_mercado FLOAT, 
-                valor_ev FLOAT, 
-                mercado_tipo TEXT, 
-                fixture_id INTEGER, 
-                stats_resumo TEXT, 
-                match_date TIMESTAMP, 
-                created_at TIMESTAMP DEFAULT NOW()
-            );
-        """)
-        conn.commit()
-
-        # Define a data de hoje para busca
-        data_atual = datetime.now(FUSO_BR).strftime('%Y-%m-%d')
-        print(f"🔎 Varrendo data: {data_atual}")
-        
-        url = f"https://v3.football.api-sports.io/fixtures?date={data_atual}"
         headers = {'x-rapidapi-key': API_KEY, 'x-rapidapi-host': 'v3.football.api-sports.io'}
+        data_hoje = datetime.now(pytz.timezone('America/Sao_Paulo')).strftime('%Y-%m-%d')
         
-        res_api = requests.get(url, headers=headers, timeout=20).json()
-        jogos = res_api.get('response', [])
-        
-        total = 0
-        if jogos:
-            # Filtra jogos das ligas de elite
-            lista_final = [j for j in jogos if j['league']['id'] in LIGAS_ELITE][:10]
-            print(f"✅ Analisando {len(lista_final)} jogos de elite...")
+        # Busca jogos de hoje
+        res = requests.get(f"https://v3.football.api-sports.io/fixtures?date={data_hoje}", headers=headers).json()
+        jogos = res.get('response', [])[:5] # Analisando os 5 primeiros para teste
 
-            for j in lista_final:
-                f_id = j['fixture']['id']
-                time_casa = j['teams']['home']['name']
-                time_fora = j['teams']['away']['name']
-                liga = j['league']['name']
-                horario_utc = j['fixture']['date'] # Captura o horário real do jogo
+        for j in jogos:
+            f_id = j['fixture']['id']
+            nome_jogo = f"{j['teams']['home']['name']} x {j['teams']['away']['name']}"
+            
+            # BUSCANDO ESTATÍSTICAS PARA POISSON
+            # Pegamos a média de gols dos últimos jogos dos times
+            pred_res = requests.get(f"https://v3.football.api-sports.io/predictions?fixture={f_id}", headers=headers).json()
+            
+            if pred_res.get('response'):
+                data = pred_res['response'][0]
+                # Média de gols esperada (lambda) baseada na força de ataque/defesa
+                lambda_gols = (data['teams']['home']['last_5']['goals']['for']['average'] + 
+                               data['teams']['away']['last_5']['goals']['for']['average'])
+                
+                prob_gols = round(probabilidade_over_25(float(lambda_gols)), 2)
+                
+                # Para escanteios e outros, usamos as porcentagens da própria API para simplificar
+                prob_cantos = float(data['comparison']['corners']['home'].replace('%','')) if data['comparison']['corners']['home'] else 0
+                prob_chutes = float(data['comparison']['attacking']['home'].replace('%','')) if data['comparison']['attacking']['home'] else 0
+                
+                # Cálculo de EV (Exemplo: Odd de 2.00 na Bet365)
+                odd_mercado = 2.00 
+                ev_gols = round((prob_gols * odd_mercado) - 100, 2)
 
-                try:
-                    # Busca predições da API
-                    p_res = requests.get(f"https://v3.football.api-sports.io/predictions?fixture={f_id}", headers=headers).json()
-                    if not p_res.get('response'): continue
-                    
-                    # Simulação de cálculo (Substitua pela sua lógica matemática se desejar)
-                    prob_real = 65.5
-                    ev_calculado = 12.5
-                    
-                    # 2. Insere no banco incluindo o match_date
-                    cur.execute("""
-                        INSERT INTO analysis_logs (fixture_id, fixture_name, probabilidade, odd_justa, odd_mercado, valor_ev, mercado_tipo, stats_resumo, match_date, created_at)
-                        VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s, NOW())
-                    """, (f_id, f"⚽ {liga} | {time_casa} x {time_fora}", prob_real, 1.45, 1.85, ev_calculado, "Over 2.5", "IA: Tendência de gols", horario_utc))
-                    
-                    conn.commit()
-                    total += 1
-                    
-                    # Alerta Telegram
-                    if ev_calculado > 10:
-                        msg = criar_mensagem_vip(f"{time_casa} x {time_fora}", liga, ev_calculado, prob_real, "Over 2.5")
-                        enviar_alerta(msg)
-                        
-                except Exception as e_inner:
-                    print(f"⚠️ Erro no jogo {f_id}: {e_inner}")
-                    continue
+                cur.execute("""
+                    INSERT INTO analysis_logs (
+                        fixture_id, fixture_name, valor_ev, match_date, 
+                        gols_ev, cantos_ev, chutes_ev, cartoes_ev, stats_resumo
+                    ) VALUES (%s, %s, %s, %s, %s, %s, %s, %s, %s)
+                    ON CONFLICT (fixture_id) DO NOTHING
+                """, (f_id, nome_jogo, ev_gols, j['fixture']['date'], 
+                      prob_gols, prob_cantos, prob_chutes, 5.0, "Poisson: Alta probabilidade baseada em médias históricas."))
+                conn.commit()
+                print(f"✅ Analisado: {nome_jogo} | Poisson Gols: {prob_gols}%")
 
         conn.close()
-        print(f"🏆 FIM! {total} jogos processados com sucesso.")
-
     except Exception as e:
-        print(f"❌ ERRO GERAL: {e}")
+        print(f"❌ Erro: {e}")
 
 if __name__ == "__main__":
     minerar_futuro()
