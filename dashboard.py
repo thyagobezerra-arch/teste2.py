@@ -5,6 +5,37 @@ import plotly.graph_objects as go
 import os
 import uuid
 
+# --- SISTEMA DE LOGIN ---
+if 'logged_in' not in st.session_state:
+    st.session_state['logged_in'] = False
+
+def autenticar(user, pwd):
+    # Conecta no banco para conferir a senha
+    conn = init_connection()
+    cur = conn.cursor()
+    cur.execute("SELECT id FROM users WHERE username = %s AND password = %s", (user, pwd))
+    auth = cur.fetchone()
+    conn.close()
+    return auth is not None
+
+if not st.session_state['logged_in']:
+    st.title("🦁 Edge Pro Analytics")
+    with st.form("login"):
+        u = st.text_input("Usuário")
+        p = st.text_input("Senha", type="password")
+        if st.form_submit_button("Entrar"):
+            if autenticar(u, p):
+                st.session_state['logged_in'] = True
+                st.rerun()
+            else:
+                st.error("Dados incorretos!")
+    st.stop() # Trava o site aqui até logar
+
+# --- SE CHEGOU AQUI, ESTÁ LOGADO! EXIBIR PAINEL ABAIXO ---
+st.sidebar.success(f"Logado como: Operador")
+if st.sidebar.button("Sair"):
+    st.session_state['logged_in'] = False
+    st.rerun()
 st.set_page_config(page_title="Edge Pro Analytics", page_icon="🦁", layout="wide")
 
 # CSS para visual profissional
@@ -59,10 +90,22 @@ if not df.empty:
     for i, row in df_filtrado.iterrows():
         chave_unica = str(uuid.uuid4())
         
-        # Formatação de Data e Hora
-        data_jogo = pd.to_datetime(row['match_date']).strftime('%d/%m %H:%M')
+        # --- CORREÇÃO DE FUSO HORÁRIO BRASIL ---
+        # 1. Converte o valor do banco para um objeto de tempo
+        dt_obj = pd.to_datetime(row['match_date'])
+        
+        # 2. Garante que ele seja tratado como UTC e depois converte para São Paulo
+        # Se o banco já vier com fuso, usamos tz_convert, se não, usamos tz_localize
+        try:
+            data_br = dt_obj.tz_localize('UTC').tz_convert('America/Sao_Paulo')
+        except:
+            data_br = dt_obj.tz_convert('America/Sao_Paulo')
+            
+        data_jogo = data_br.strftime('%d/%m %H:%M')
+        # ---------------------------------------
         
         with st.expander(f"⏰ {data_jogo} | {row['fixture_name']} | EV: {row['valor_ev']:.2f}%", expanded=True):
+            # ... resto do código ...
             col_graf, col_info, col_btn = st.columns([1, 2, 1])
             
             with col_graf:
