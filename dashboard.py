@@ -7,17 +7,14 @@ import uuid
 from datetime import datetime, timedelta
 import pytz
 
-# 1. CONFIGURAÇÃO
 st.set_page_config(page_title="Edge Pro Analytics", page_icon="🦁", layout="wide")
 
-# 2. CONEXÃO
 def init_connection():
     db_url = os.getenv("DB_URL") or st.secrets.get("DB_URL")
     if not db_url:
         db_url = "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
     return psycopg2.connect(db_url)
 
-# 3. LOGIN OTIMIZADO
 def autenticar(user, pwd):
     try:
         conn = init_connection()
@@ -43,19 +40,11 @@ if not st.session_state['logged_in']:
             else: st.error("Acesso negado.")
     st.stop()
 
-# --- DASHBOARD DE ANTECIPAÇÃO ---
-
 @st.cache_data(ttl=60)
 def load_data():
     try:
         conn = init_connection()
-        # FILTRO DE OURO: Só traz jogos DAQUI PARA FRENTE (UTC)
-        query = """
-            SELECT * FROM analysis_logs 
-            WHERE match_date > NOW() 
-            ORDER BY match_date ASC 
-            LIMIT 100
-        """
+        query = "SELECT * FROM analysis_logs WHERE match_date > NOW() ORDER BY match_date ASC LIMIT 100"
         df = pd.read_sql(query, conn)
         conn.close()
         if not df.empty:
@@ -63,59 +52,75 @@ def load_data():
         return df
     except: return pd.DataFrame()
 
-# Menu
+# Menu Lateral
 st.sidebar.title("🦁 Painel VIP")
 if st.sidebar.button("🔄 Atualizar Grade"): st.cache_data.clear(); st.rerun()
 if st.sidebar.button("Sair"): st.session_state['logged_in'] = False; st.rerun()
 
 df = load_data()
 
-st.markdown("# 🦁 Próximas Oportunidades (48h)")
+st.markdown("# 🦁 Grade de Oportunidades")
 st.markdown("---")
 
 if not df.empty:
-    ev_min = st.sidebar.slider("EV Mínimo", 0, 50, 10)
+    ev_min = st.sidebar.slider("Filtrar por EV Score", 0, 50, 10)
     df = df[df['valor_ev'] >= ev_min]
     
+    st.sidebar.write(f"📊 **{len(df)}** jogos encontrados.")
+
     for i, row in df.iterrows():
         chave = str(uuid.uuid4())
         
-        # Converte UTC para João Pessoa (-3h)
+        # Ajuste de Fuso e Hora
         match_time = pd.to_datetime(row['match_date'])
         br_time = match_time - timedelta(hours=3)
-        
-        # Filtro Visual Extra: Se já passou do horário, não mostra (redundância de segurança)
         if br_time < (datetime.now() - timedelta(hours=3)): continue
-        
-        str_data = br_time.strftime('%d/%m %H:%M')
-        
-        # Tratamento de Strings do Resumo
+        str_data = br_time.strftime('%H:%M')
+        dia_semana = br_time.strftime('%d/%m')
+
+        # SEPARAÇÃO INTELIGENTE: Liga vs Times
+        # O robô agora salva como "LIGA # TIME A x TIME B"
+        try:
+            if '#' in row['fixture_name']:
+                liga_nome, times_nome = row['fixture_name'].split('#')
+            else:
+                liga_nome = "🏆 Campeonato"
+                times_nome = row['fixture_name']
+        except:
+            liga_nome = "Futebol"
+            times_nome = row['fixture_name']
+
+        # Parsing de Stats
         try:
             parts = row['stats_resumo'].split('|')
             media_gols = parts[0].split(':')[1].strip()
             prob_over_15 = parts[1].split(':')[1].strip()
-        except:
-            media_gols, prob_over_15 = "N/A", "N/A"
+        except: media_gols, prob_over_15 = "-", "-"
 
-        with st.expander(f"⏰ {str_data} | {row['fixture_name']}", expanded=True):
+        # CARD VISUAL PROFISSIONAL
+        # O título agora mostra: 🏆 LIGA  |  ⏰ HORA  |  TIMES
+        titulo_card = f"🏆 **{liga_nome.strip()}** |  ⏰ {dia_semana} às {str_data}  |  ⚽ {times_nome.strip()}"
+        
+        with st.expander(titulo_card, expanded=True):
             c1, c2, c3 = st.columns([1, 2, 1])
             with c1:
                 fig = go.Figure(go.Indicator(
                     mode="gauge+number", value=row['valor_ev'],
                     title={'text': "EV Score", 'font': {'size': 15}},
-                    gauge={'axis': {'range': [None, 100]}, 'bar': {'color': "gold"}}
+                    gauge={'axis': {'range': [None, 100]}, 'bar': {'color': "#00ff00" if row['valor_ev'] > 75 else "gold"}}
                 ))
-                fig.update_layout(height=140, margin=dict(t=30, b=10), paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"})
+                fig.update_layout(height=130, margin=dict(t=30, b=10), paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"})
                 st.plotly_chart(fig, use_container_width=True, key=f"g_{chave}")
             
             with c2:
-                st.markdown("##### 📊 Raio-X da Partida")
-                st.info(f"⚽ **Gols:** Média {media_gols} | +1.5: {prob_over_15} | +2.5: {row['gols_ev']:.0f}%")
-                st.warning(f"🚩 **Cantos:** +9.5: {row['cantos_ev']:.0f}% de chance")
+                st.markdown(f"### {times_nome.strip()}")
+                st.info(f"📊 **Estatísticas:** Média de Gols {media_gols} | +1.5 Gols: {prob_over_15}")
+                st.warning(f"⛳ **Cantos:** +9.5 projetado com {row['cantos_ev']:.0f}% de chance")
             
             with c3:
                 st.markdown("<br>", unsafe_allow_html=True)
-                st.button("📲 Alertar Grupo", key=f"b_{chave}", use_container_width=True)
+                bet_link = "https://www.bet365.com"
+                st.markdown(f"""<a href="{bet_link}" target="_blank"><button style="width:100%; padding:10px; background-color:#1e3a8a; color:white; border:none; border-radius:5px; cursor:pointer;">💰 Abrir na Bet365</button></a>""", unsafe_allow_html=True)
 
 else:
-    st.info("🔎 Buscando as melhores oportunidades para as próximas 48h...")
+    st.info("🔎 O Robô está varrendo as ligas... aguarde a próxima sincronização.")
