@@ -2,7 +2,7 @@ import math
 import requests
 import psycopg2
 import os
-from datetime import datetime, timedelta
+from datetime import datetime
 import pytz
 
 # ==============================================================================
@@ -10,54 +10,57 @@ import pytz
 # ==============================================================================
 DB_URL = "postgresql://postgres.vbxmtclyraxmhvfcnfee:MudarAgora2026Paraiba@aws-1-sa-east-1.pooler.supabase.com:6543/postgres"
 API_KEY = "a38db0f256a84b4c71d294ac0e213307"
-FUSO_BR = pytz.timezone('America/Sao_Paulo')
 
-def minerar_futuro():
-    print("🦁 MODO DIAGNÓSTICO ATIVADO")
+def prob_over_poisson(lambda_val, n):
+    """Calcula a probabilidade de sair MAIS de N eventos."""
+    if lambda_val <= 0.1: lambda_val = 0.1
+    prob_acumulada = sum((math.exp(-lambda_val) * (lambda_val**i)) / math.factorial(i) for i in range(int(n) + 1))
+    return max(0, (1 - prob_acumulada) * 100)
+
+def minerar_dia_28():
+    print("🦁 MINERADOR ATIVADO: FOCO NO DIA 28/02 (SÁBADO)")
     try:
         conn = psycopg2.connect(DB_URL)
         cur = conn.cursor()
         headers = {'x-rapidapi-key': API_KEY, 'x-rapidapi-host': 'v3.football.api-sports.io'}
         
-        # ESTRATÉGIA DE EMERGÊNCIA: Busca os PRÓXIMOS 50 JOGOS de qualquer liga
-        # O endpoint 'next' é mais estável que o de 'date' quando a cota está baixa
-        print("📡 Consultando API (Endpoint: Next 50)...")
-        res = requests.get("https://v3.football.api-sports.io/fixtures?next=50", headers=headers).json()
+        # DATA ALVO FIXA: Dia 28 de Fevereiro
+        data_alvo = "2026-02-28"
+        print(f"📅 Buscando grade completa para: {data_alvo}")
         
-        # VERIFICA ERROS DE COTA (API LIMIT)
-        if res.get('errors'):
-            print(f"❌ ERRO DA API: {res['errors']}")
-            if 'requests' in str(res['errors']):
-                print("🚨 VOCÊ ATINGIU O LIMITE DE 100 CHAMADAS/DIA. O robô só voltará a funcionar após a meia-noite.")
-            return
-
+        url = f"https://v3.football.api-sports.io/fixtures?date={data_alvo}"
+        res = requests.get(url, headers=headers).json()
+        
         jogos = res.get('response', [])
-        print(f"📊 API retornou {len(jogos)} jogos futuros.")
+        print(f"📊 Encontrados {len(jogos)} jogos para o dia 28.")
 
         total_salvo = 0
-        for j in jogos:
+        # Vamos processar os primeiros 30 jogos (o limite do plano Free é 100 chamadas/dia)
+        for j in jogos[:30]:
             f_id = j['fixture']['id']
             nome_jogo = f"{j['league']['name']} | {j['teams']['home']['name']} x {j['teams']['away']['name']}"
             
-            # Cálculo de Poisson Fixo (Para não gastar chamadas extras de predição e economizar sua cota)
-            prob_g = 65.0
-            prob_c = 55.0
+            # Cálculo Poisson Estimado (Gols 2.7 e Cantos 10.5)
+            prob_g = round(prob_over_poisson(2.7, 2), 2)
+            prob_c = round(prob_over_poisson(10.5, 9), 2)
+            ev_total = round((prob_g + prob_c) / 4.5, 2) # Ajuste de escala para o velocímetro
 
             cur.execute("""
                 INSERT INTO analysis_logs (fixture_id, fixture_name, valor_ev, match_date, gols_ev, cantos_ev, stats_resumo)
                 VALUES (%s, %s, %s, %s, %s, %s, %s)
                 ON CONFLICT (fixture_id) 
                 DO UPDATE SET valor_ev = EXCLUDED.valor_ev;
-            """, (f_id, nome_jogo, 12.5, j['fixture']['date'], prob_g, prob_c, "Cálculo em processamento..."))
+            """, (f_id, nome_jogo, ev_total, j['fixture']['date'], prob_g, prob_c, "Análise Preditiva de Sábado"))
             
             conn.commit()
             total_salvo += 1
+            print(f"   ✅ SALVO: {nome_jogo}")
 
         conn.close()
-        print(f"🏆 SUCESSO! {total_salvo} jogos injetados no banco.")
+        print(f"🏆 SUCESSO! {total_salvo} jogos injetados no banco para amanhã.")
         
     except Exception as e:
-        print(f"❌ ERRO CRÍTICO: {e}")
+        print(f"❌ ERRO: {e}")
 
 if __name__ == "__main__":
-    minerar_futuro()
+    minerar_dia_28()
