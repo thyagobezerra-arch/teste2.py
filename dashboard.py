@@ -90,36 +90,58 @@ if not df.empty:
     
     st.sidebar.info(f"Monitorando {len(df_filtrado)} jogos agora.")
 
+    # ... (Mantenha o início do seu arquivo igual até chegar no loop 'for i, row in df_filtrado.iterrows():')
+
     for i, row in df_filtrado.iterrows():
         chave = str(uuid.uuid4())
         
-        # Ajuste de Horário para João Pessoa
+        # Ajuste Fuso
         horario_br = pd.to_datetime(row['match_date']) - timedelta(hours=3)
         data_formatada = horario_br.strftime('%d/%m %H:%M')
         
-        with st.expander(f"⏰ {data_formatada} | {row['fixture_name']} | EV: {row['valor_ev']:.2f}%", expanded=True):
-            # VELOCÍMETRO CENTRALIZADO
-            fig = go.Figure(go.Indicator(
-                mode = "gauge+number", 
-                value = row['valor_ev'],
-                title = {'text': "VALOR ESPERADO (EV) TOTAL", 'font': {'size': 20}},
-                gauge = {
-                    'axis': {'range': [None, 40]}, 
-                    'bar': {'color': "gold"},
-                    'steps': [{'range': [0, 15], 'color': "#333"}, {'range': [15, 40], 'color': "#1a1a1a"}]
-                }
-            ))
-            fig.update_layout(height=350, paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"}, margin=dict(t=50, b=20))
-            st.plotly_chart(fig, use_container_width=True, key=f"g_{chave}")
+        # Extraindo dados do texto resumo (Gambiarra inteligente para não mudar o banco agora)
+        # O resumo vem assim: "Média Gols: 2.80 | Over 1.5: 85% | Over 2.5: 65% | Exp. Cantos: ~10.2"
+        try:
+            stats_text = row['stats_resumo']
+            parts = stats_text.split('|')
+            media_gols = parts[0].split(':')[1].strip()
+            prob_over_15 = parts[1].split(':')[1].strip()
+            media_cantos = parts[3].split(':')[1].strip()
+        except:
+            media_gols = "-"
+            prob_over_15 = "-"
+            media_cantos = "-"
+
+        with st.expander(f"⏰ {data_formatada} | {row['fixture_name']}", expanded=True):
+            
+            c1, c2, c3 = st.columns([1, 2, 1])
+            
+            with c1:
+                # VELOCÍMETRO (EV GERAL)
+                fig = go.Figure(go.Indicator(
+                    mode = "gauge+number", value = row['valor_ev'],
+                    title = {'text': "Potencial (EV)", 'font': {'size': 16}},
+                    gauge = {'axis': {'range': [None, 100]}, 'bar': {'color': "#00ff00" if row['valor_ev'] > 70 else "gold"}}
+                ))
+                fig.update_layout(height=160, margin=dict(t=30, b=10, l=10, r=10), paper_bgcolor='rgba(0,0,0,0)', font={'color': "white"})
+                st.plotly_chart(fig, use_container_width=True, key=f"g_{chave}")
+
+            with c2:
+                st.markdown("### 📊 Estatísticas Projetadas")
+                col_a, col_b = st.columns(2)
+                with col_a:
+                    st.info(f"⚽ **Gols Esperados**\n\n"
+                            f"• Média do Jogo: **{media_gols}**\n\n"
+                            f"• Prob. Over 1.5: **{prob_over_15}**\n\n"
+                            f"• Prob. Over 2.5: **{row['gols_ev']:.0f}%**")
+                with col_b:
+                    st.warning(f"🚩 **Escanteios**\n\n"
+                               f"• Média Estimada: **{media_cantos}**\n\n"
+                               f"• Prob. Over 9.5: **{row['cantos_ev']:.0f}%**")
+
+            with c3:
+                st.markdown("<br>", unsafe_allow_html=True)
+                st.button("📲 Enviar no Telegram", key=f"btn_{chave}", use_container_width=True)
+                st.markdown(f"<div style='text-align:center; font-size:12px; color:#888'>{row['stats_resumo']}</div>", unsafe_allow_html=True)
 
             st.markdown("---")
-            st.markdown("### 🎯 Oportunidades por Mercado")
-            c1, c2, c3, c4 = st.columns(4)
-            with c1: st.metric("⚽ Gols (Over)", f"{row.get('gols_ev', 0):.1f}%")
-            with c2: st.metric("🚩 Escanteios", f"{row.get('cantos_ev', 0):.1f}%")
-            with c3: st.metric("🎯 Chutes ao Gol", f"{row.get('chutes_ev', 0):.1f}%")
-            with c4: st.metric("🟨 Cartões", f"{row.get('cartoes_ev', 0):.1f}%")
-            
-            st.info(f"💡 **Análise IA:** {row['stats_resumo']}")
-else:
-    st.warning("⏳ O banco de dados está sincronizando os jogos encontrados pelo minerador. Clique em 'Atualizar Grade' na lateral.")
